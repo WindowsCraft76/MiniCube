@@ -6,7 +6,6 @@ from tkinter import ttk, messagebox
 import subprocess
 import threading
 import time
-import hashlib
 from pathlib import Path
 
 # Dossier principal launcher_main à côté du script
@@ -30,8 +29,12 @@ class MiniLauncherApp:
         # Variables
         self.username_var = tk.StringVar(value="Steve")
         self.version_var = tk.StringVar()
-        self.snapshot_var = tk.BooleanVar(value=False)
         self.ram_var = tk.IntVar(value=2048)
+        self.show_snapshots_var = tk.BooleanVar(value=False)
+        self.show_old_var = tk.BooleanVar(value=False)
+
+        self.download_thread = None
+        self.cancel_download = False
 
         # UI
         tk.Label(root, text="Pseudo:").pack(pady=2)
@@ -44,9 +47,14 @@ class MiniLauncherApp:
         self.ram_spin.pack(pady=2)
 
         self.snapshot_check = tk.Checkbutton(root, text="Afficher les snapshots",
-                                             variable=self.snapshot_var,
+                                             variable=self.show_snapshots_var,
                                              command=self.refresh_version_list)
         self.snapshot_check.pack(pady=2)
+
+        self.old_check = tk.Checkbutton(root, text="Afficher old_alpha / old_beta",
+                                        variable=self.show_old_var,
+                                        command=self.refresh_version_list)
+        self.old_check.pack(pady=2)
 
         tk.Label(root, text="Version:").pack(pady=2)
         self.version_menu = ttk.Combobox(root, textvariable=self.version_var, state="readonly")
@@ -85,6 +93,7 @@ class MiniLauncherApp:
         self.ram_spin.config(state=state)
         self.version_menu.config(state=state)
         self.snapshot_check.config(state=state)
+        self.old_check.config(state=state)
         self.launch_btn.config(state=state)
 
     # Log colorée
@@ -105,12 +114,21 @@ class MiniLauncherApp:
 
         items = []
         for v in self.version_manifest["versions"]:
-            if v["type"] == "release" or (self.snapshot_var.get() and v["type"] == "snapshot"):
-                items.append(v["id"])
-        items.sort(reverse=True)
-        self.version_menu["values"] = items
-        if items:
-            self.version_var.set(items[0])
+            vtype = v.get("type", "")
+            if vtype == "release":
+                items.append(v)
+            elif vtype == "snapshot" and self.show_snapshots_var.get():
+                items.append(v)
+            elif vtype in ["old_alpha", "old_beta"] and self.show_old_var.get():
+                items.append(v)
+
+        # Tri par date de sortie (latest first)
+        items.sort(key=lambda v: v["releaseTime"], reverse=True)
+        version_ids = [v["id"] for v in items]
+
+        self.version_menu["values"] = version_ids
+        if version_ids:
+            self.version_var.set(version_ids[0])
 
     # Progression
     def update_progress(self, done, total, text=""):
@@ -120,11 +138,7 @@ class MiniLauncherApp:
         self.root.update_idletasks()
 
     def format_duration(self, seconds: float) -> str:
-        """Retourne une chaîne lisible du type '1h02m03s', '5m12s' ou '42s'."""
-        try:
-            secs = int(max(0, round(seconds)))
-        except Exception:
-            return "0s"
+        secs = int(max(0, round(seconds)))
         if secs >= 3600:
             h = secs // 3600
             m = (secs % 3600) // 60
@@ -177,28 +191,27 @@ class MiniLauncherApp:
             if "downloads" in lib and "artifact" in lib["downloads"]:
                 path = lib["downloads"]["artifact"]["path"]
                 url = lib["downloads"]["artifact"]["url"]
-                sha1 = lib["downloads"]["artifact"].get("sha1")
                 lib_path = LIBRARIES_DIR / path
-                tasks.append(("lib", lib_path, url, sha1))
+                tasks.append(("lib", lib_path, url))
         for name, obj in objects.items():
             hash_val = obj["hash"]
             subdir = hash_val[:2]
             url = f"https://resources.download.minecraft.net/{subdir}/{hash_val}"
             obj_path = OBJECTS_DIR / subdir / hash_val
-            tasks.append(("asset", obj_path, url, hash_val))
+            tasks.append(("asset", obj_path, url))
 
         # Téléchargement avec progression
         done = 0
         total = len(tasks)
         start_time = time.time()
-        for kind, path, url, expected in tasks:
+        for kind, path, url in tasks:
+            if self.cancel_download:
+                self.log("[Launcher] Téléchargement annulé !", "warn")
+                self.update_progress(0, 1, "Téléchargement annulé")
+                return None, None
             path.parent.mkdir(parents=True, exist_ok=True)
-            # If the file already exists, do NOT remove or replace it.
-            # Just skip downloading to preserve the existing file.
             if path.exists():
                 self.log(f"{kind.capitalize()} existe déjà, on saute: {path.name}", "info")
-                # Aussi imprimer un message dans la console/terminal pour visibilité
-                print(f"[INFO] {kind.capitalize()} déjà téléchargé, on saute: {path}")
             else:
                 try:
                     urllib.request.urlretrieve(url, path)
@@ -217,7 +230,17 @@ class MiniLauncherApp:
 
     # Lancer le jeu
     def launch_game(self):
-        threading.Thread(target=self._launch_game_thread, daemon=True).start()
+        if self.download_thread and self.download_thread.is_alive():
+            # Annuler le téléchargement
+            self.cancel_download = True
+            self.log("[Launcher] Annulation du téléchargement demandée.", "warn")
+            return
+
+        # Début d’un nouveau téléchargement / lancement
+        self.cancel_download = False
+        self.launch_btn.config(text="Annuler")
+        self.download_thread = threading.Thread(target=self._launch_game_thread, daemon=True)
+        self.download_thread.start()
 
     def _launch_game_thread(self):
         username = self.username_var.get()
@@ -226,8 +249,14 @@ class MiniLauncherApp:
 
         try:
             version_data, version_jar_path = self.prepare_version(version_id)
+            if version_data is None:
+                # Téléchargement annulé
+                self.root.after(0, lambda: self.launch_btn.config(text="Lancer le jeu"))
+                self.root.after(0, lambda: self.set_ui_state(True))
+                return
         except Exception as e:
             self.root.after(0, lambda: messagebox.showerror("Erreur", f"Impossible de préparer la version : {e}"))
+            self.root.after(0, lambda: self.launch_btn.config(text="Lancer le jeu"))
             return
 
         self.root.after(0, lambda: self.set_ui_state(False))
@@ -265,14 +294,17 @@ class MiniLauncherApp:
             self.root.after(0, lambda l=line: self.log(l.strip(), "game"))
         game_process.wait()
 
+        self.root.after(0, lambda: self.launch_btn.config(text="Lancer le jeu"))
         self.root.after(0, lambda: self.set_ui_state(True))
         self.root.after(0, lambda: self.progress_label.config(text="Jeu fermé."))
         self.log("=== Jeu terminé ===", "info")
+
 
 def main():
     root = tk.Tk()
     app = MiniLauncherApp(root)
     root.mainloop()
+
 
 if __name__ == "__main__":
     main()
