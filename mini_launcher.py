@@ -34,11 +34,11 @@ class MiniLauncherApp:
         self.ram_var = tk.IntVar(value=2048)
 
         # UI
-        tk.Label(root, text="Pseudo :").pack(pady=2)
+        tk.Label(root, text="Pseudo:").pack(pady=2)
         self.username_entry = tk.Entry(root, textvariable=self.username_var)
         self.username_entry.pack(pady=2)
 
-        tk.Label(root, text="Mémoire RAM (Mo) :").pack(pady=2)
+        tk.Label(root, text="Mémoire RAM (Mo):").pack(pady=2)
         self.ram_spin = tk.Spinbox(root, from_=512, to=16384, increment=512,
                                    textvariable=self.ram_var)
         self.ram_spin.pack(pady=2)
@@ -48,7 +48,7 @@ class MiniLauncherApp:
                                              command=self.refresh_version_list)
         self.snapshot_check.pack(pady=2)
 
-        tk.Label(root, text="Version :").pack(pady=2)
+        tk.Label(root, text="Version:").pack(pady=2)
         self.version_menu = ttk.Combobox(root, textvariable=self.version_var, state="readonly")
         self.version_menu.pack(pady=2)
 
@@ -57,7 +57,7 @@ class MiniLauncherApp:
 
         # Barre de progression stylée
         style = ttk.Style()
-        style.theme_use('default')
+        style.theme_use('classic')
         style.configure("blue.Horizontal.TProgressbar", troughcolor='grey', background='blue', thickness=20)
         self.progress_var = tk.DoubleVar(value=0.0)
         self.progress = ttk.Progressbar(root, style="blue.Horizontal.TProgressbar",
@@ -66,7 +66,7 @@ class MiniLauncherApp:
         self.progress_label = tk.Label(root, text="En attente...")
         self.progress_label.pack(pady=2)
 
-        tk.Label(root, text="Logs :").pack(pady=2)
+        tk.Label(root, text="Logs:").pack(pady=2)
         self.log_text = tk.Text(root, height=15, width=80, bg="black", fg="white")
         self.log_text.pack(pady=2)
         self.log_text.tag_config("info", foreground="white")
@@ -100,7 +100,7 @@ class MiniLauncherApp:
             with open(VERSIONS_DIR / "version_manifest.json", "r", encoding="utf-8") as f:
                 self.version_manifest = json.load(f)
         except Exception as e:
-            messagebox.showerror("Erreur", f"Impossible de récupérer le manifest : {e}")
+            messagebox.showerror("Erreur", f"Impossible de récupérer le manifest: {e}")
             return
 
         items = []
@@ -118,6 +118,23 @@ class MiniLauncherApp:
         if text:
             self.progress_label.config(text=text)
         self.root.update_idletasks()
+
+    def format_duration(self, seconds: float) -> str:
+        """Retourne une chaîne lisible du type '1h02m03s', '5m12s' ou '42s'."""
+        try:
+            secs = int(max(0, round(seconds)))
+        except Exception:
+            return "0s"
+        if secs >= 3600:
+            h = secs // 3600
+            m = (secs % 3600) // 60
+            s = secs % 60
+            return f"{h}h{m:02d}m{s:02d}s"
+        if secs >= 60:
+            m = secs // 60
+            s = secs % 60
+            return f"{m}m{s:02d}s"
+        return f"{secs}s"
 
     # Préparer la version
     def prepare_version(self, version_id):
@@ -176,13 +193,13 @@ class MiniLauncherApp:
         start_time = time.time()
         for kind, path, url, expected in tasks:
             path.parent.mkdir(parents=True, exist_ok=True)
-            need = True
+            # If the file already exists, do NOT remove or replace it.
+            # Just skip downloading to preserve the existing file.
             if path.exists():
-                with open(path, "rb") as f:
-                    file_hash = hashlib.sha1(f.read()).hexdigest()
-                if file_hash == expected:
-                    need = False
-            if need:
+                self.log(f"{kind.capitalize()} existe déjà, on saute: {path.name}", "info")
+                # Aussi imprimer un message dans la console/terminal pour visibilité
+                print(f"[INFO] {kind.capitalize()} déjà téléchargé, on saute: {path}")
+            else:
                 try:
                     urllib.request.urlretrieve(url, path)
                     self.log(f"Téléchargé {kind}: {path.name}", "success")
@@ -192,7 +209,8 @@ class MiniLauncherApp:
             elapsed = time.time() - start_time
             speed = done / elapsed if elapsed > 0 else 0
             remaining = (total - done) / speed if speed > 0 else 0
-            self.update_progress(done, total, f"{done}/{total} fichiers - reste {remaining:.1f}s")
+            remaining_str = self.format_duration(remaining)
+            self.update_progress(done, total, f"{done}/{total} fichiers - reste {remaining_str}")
 
         self.update_progress(total, total, "Prêt !")
         return version_data, version_jar_path
