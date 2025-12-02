@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 # Dossier principal launcher_main à côté du script
-BASE_DIR = Path(__file__).resolve().parent / ".mini_launcher_mc"
+BASE_DIR = Path(__file__).resolve().parent / "file_main_mc"
 VERSIONS_DIR = BASE_DIR / "versions"
 ASSETS_DIR = BASE_DIR / "assets"
 LIBRARIES_DIR = BASE_DIR / "libraries"
