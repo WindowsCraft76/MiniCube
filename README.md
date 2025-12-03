@@ -20,5 +20,5 @@ I don't plan to release regular updates.
 - Icon
 - Modernize interface
 
-### Warning: 
-I created this launcher for testing purposes for modders, creators, etc.
+### Disclaimer: 
+I created this launcher for testing purposes for modders and creators. I am not responsible for any misuse of this launcher!
