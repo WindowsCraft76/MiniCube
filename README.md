@@ -16,6 +16,7 @@ I don't plan to release regular updates.
 ### Choose a feature:
 - Instance system
 - Language system
+- Update system
 - Change language to avoid installing Python
 - Icon
 - Modernize interface
