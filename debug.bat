@@ -6,3 +6,4 @@ IF %ERRORLEVEL% NEQ 0 (
 ) ELSE (
     python mini_launcher_mc.py
 )
+pause
