@@ -20,6 +20,7 @@ I don't plan to release regular updates.
 - Change language to avoid installing Python
 - Icon
 - Modernize interface
+- More game launch options
 
 ### Disclaimer: 
 I created this launcher for testing purposes for modders and creators. I am not responsible for any misuse of this launcher!
