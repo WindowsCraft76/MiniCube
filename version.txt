@@ -1,0 +1,1 @@
+v0.1.0b|https://github.com/WindowsCraft76/mini-launcher-minecraft/releases/download/v0.1.0b/MiniLauncherMinecraftSetup-v0.1.0b.exe|SHA256_HEX_CHECKSUM
