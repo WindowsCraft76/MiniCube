@@ -1,5 +1,3 @@
-# Translated version of mini_launcher_mc.py
-
 import os
 import json
 import urllib.request
