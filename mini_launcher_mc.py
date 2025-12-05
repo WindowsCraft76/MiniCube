@@ -8,7 +8,8 @@ import threading
 import time
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent / "file_main_mc"
+# ------------------ File paths ------------------
+BASE_DIR = Path(__file__).resolve().parent / "GameFile"
 VERSIONS_DIR = BASE_DIR / "versions"
 ASSETS_DIR = BASE_DIR / "assets"
 LIBRARIES_DIR = BASE_DIR / "libraries"
@@ -20,6 +21,48 @@ for d in [BASE_DIR, VERSIONS_DIR, ASSETS_DIR, LIBRARIES_DIR, INDEXES_DIR, OBJECT
 
 VERSION_MANIFEST = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json"
 
+
+# ------------------ Center window ------------------
+def center_window(window, width, height):
+    screen_width = window.winfo_screenwidth()
+    screen_height = window.winfo_screenheight()
+    x = (screen_width - width) // 2
+    y = (screen_height - height) // 2
+    window.geometry(f"{width}x{height}+{x}+{y}")
+
+
+# ------------------ Splash screen ------------------
+class SplashScreen:
+    def __init__(self, root):
+        self.root = root
+        self.window = tk.Toplevel(root)
+        self.window.overrideredirect(True)
+        center_window(self.window, 350, 150)
+        self.window.configure(bg="black")
+
+        self.label = tk.Label(self.window, text="Mini Launcher Minecraft\nLoading...", 
+                              font=("Arial", 14), fg="white", bg="black")
+        self.label.pack(expand=True)
+
+        self.progress_var = tk.DoubleVar(value=0.0)
+        self.progress = ttk.Progressbar(self.window, variable=self.progress_var, maximum=100, length=300)
+        self.progress.pack(pady=10)
+
+        self.status_var = tk.StringVar(value="Initialization...")
+        self.status_label = tk.Label(self.window, textvariable=self.status_var, fg="white", bg="black")
+        self.status_label.pack()
+
+    def update_progress(self, percent, text=None):
+        self.progress_var.set(percent)
+        if text:
+            self.status_var.set(text)
+        self.window.update_idletasks()
+
+    def close(self):
+        self.window.destroy()
+
+
+# ------------------ Main Launcher ------------------
 class MiniLauncherApp:
     def __init__(self, root):
         self.root = root
@@ -75,7 +118,7 @@ class MiniLauncherApp:
         # Styled progress bar
         style = ttk.Style()
         style.theme_use('classic')
-        style.configure("blue.Horizontal.TProgressbar", troughcolor='grey', background='blue', thickness=20)
+        style.configure("blue.Horizontal.TProgressbar", troughcolor='grey', background='green', thickness=20)
         self.progress_var = tk.DoubleVar(value=0.0)
         self.progress = ttk.Progressbar(root, style="blue.Horizontal.TProgressbar", variable=self.progress_var, maximum=1.0, length=350)
         self.progress.pack(pady=2)
@@ -85,7 +128,7 @@ class MiniLauncherApp:
         self.version_manifest = {}
         self.refresh_version_list()
 
-    # UI lock/unlock
+    # ------------------ UI lock/unlock ------------------
     def set_ui_state(self, enabled: bool):
         state = "normal" if enabled else "disabled"
         self.username_entry.config(state=state)
@@ -96,13 +139,12 @@ class MiniLauncherApp:
         self.launch_btn.config(state=state)
         self.show_logs_btn.config(state=state)
 
-    # Thread-safe log: schedule append via root.after
+    # ------------------ Logs ------------------
     def log(self, msg, kind="info"):
         timestamped = f"[{time.strftime('%H:%M:%S')}] {msg}"
         self.log_buffer.append((timestamped, kind))
         self.root.after(0, lambda: self._append_log_to_window(timestamped + "\n", kind))
 
-    # Insert in logs window if it exists
     def _append_log_to_window(self, msg, kind="info"):
         if self.log_text_win:
             try:
@@ -151,7 +193,7 @@ class MiniLauncherApp:
         self.log_text_win = None
         self.show_logs_btn.config(text="Show logs")
 
-    # Retrieve manifest and versions
+    # ------------------ Versions ------------------
     def refresh_version_list(self):
         try:
             urllib.request.urlretrieve(VERSION_MANIFEST, VERSIONS_DIR / "version_manifest.json")
@@ -178,12 +220,11 @@ class MiniLauncherApp:
         if version_ids:
             self.version_var.set(version_ids[0])
 
-    # Progress update
+    # ------------------ Progress ------------------
     def update_progress(self, done, total, text=""):
         self.progress_var.set(done / total if total > 0 else 0)
         if text:
             self.progress_label.config(text=text)
-        # use after for thread safety
         self.root.update_idletasks()
 
     def format_duration(self, seconds: float) -> str:
@@ -199,7 +240,7 @@ class MiniLauncherApp:
             return f"{m}m{s:02d}s"
         return f"{secs}s"
 
-    # Prepare the selected version (download json, jar, assets, libraries)
+    # ------------------ Prepare the version ------------------
     def prepare_version(self, version_id):
         version_info = next(v for v in self.version_manifest["versions"] if v["id"] == version_id)
         version_dir = VERSIONS_DIR / version_id
@@ -277,15 +318,13 @@ class MiniLauncherApp:
         self.update_progress(total, total, "Ready!")
         return version_data, version_jar_path
 
-    # Launch the game (handles canceling ongoing downloads)
+    # ------------------ Launch ------------------
     def launch_game(self):
         if self.download_thread and self.download_thread.is_alive():
-            # Cancel the download
             self.cancel_download = True
             self.log("Download cancellation requested.", "warn")
             return
 
-        # Start a new download / launch
         self.cancel_download = False
         self.launch_btn.config(text="Cancel")
         self.download_thread = threading.Thread(target=self._launch_game_thread, daemon=True)
@@ -299,7 +338,6 @@ class MiniLauncherApp:
         try:
             version_data, version_jar_path = self.prepare_version(version_id)
             if version_data is None:
-                # Download canceled
                 self.root.after(0, lambda: self.launch_btn.config(text="Launch game"))
                 self.root.after(0, lambda: self.set_ui_state(True))
                 return
@@ -310,7 +348,6 @@ class MiniLauncherApp:
 
         self.root.after(0, lambda: self.set_ui_state(False))
 
-        # Classpath
         classpath = []
         for lib in version_data.get("libraries", []):
             if "downloads" in lib and "artifact" in lib["downloads"]:
@@ -347,7 +384,6 @@ class MiniLauncherApp:
             return
 
         for line in iter(game_process.stdout.readline, ''):
-            # Send lines to the log (thread-safe)
             self.log(line.strip("\n"), "game")
         game_process.wait()
 
@@ -357,9 +393,32 @@ class MiniLauncherApp:
         self.log("=== Game finished ===", "info")
 
 
+# ------------------ Main ------------------
 def main():
     root = tk.Tk()
-    app = MiniLauncherApp(root)
+    root.withdraw()
+
+    splash = SplashScreen(root)
+
+    def init_launcher():
+        try:
+            splash.update_progress(0, "Downloading the manifest...")
+            urllib.request.urlretrieve(VERSION_MANIFEST, VERSIONS_DIR / "version_manifest.json")
+            splash.update_progress(50, "Loading versions...")
+
+            with open(VERSIONS_DIR / "version_manifest.json", "r", encoding="utf-8") as f:
+                version_manifest = json.load(f)
+            time.sleep(0.5)
+            splash.update_progress(100, "Prêt !")
+            time.sleep(0.3)
+        except Exception as e:
+            messagebox.showerror("Error", f"Unable to load manifest: {e}")
+        finally:
+            splash.close()
+            root.deiconify()
+            app = MiniLauncherApp(root)
+    
+    threading.Thread(target=init_launcher, daemon=True).start()
     root.mainloop()
 
 
