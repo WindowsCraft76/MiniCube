@@ -36,6 +36,7 @@ class SplashScreen:
     def __init__(self, root):
         self.root = root
         self.window = tk.Toplevel(root)
+        self.window.resizable(False, False)
         self.window.overrideredirect(True)
         center_window(self.window, 350, 150)
         self.window.configure(bg="black")
@@ -161,7 +162,7 @@ class MiniLauncherApp:
             self.show_logs_btn.config(text="Show logs")
         else:
             self.log_window = tk.Toplevel(self.root)
-            self.log_window.title("Launcher logs")
+            self.log_window.title("Mini Launcher Minecraft Logs")
             self.log_window.geometry("600x300")
             self.log_window.protocol("WM_DELETE_WINDOW", self._on_close_log_window)
 
@@ -396,6 +397,7 @@ class MiniLauncherApp:
 # ------------------ Main ------------------
 def main():
     root = tk.Tk()
+    root.resizable(False, False)
     root.withdraw()
 
     splash = SplashScreen(root)
@@ -409,7 +411,7 @@ def main():
             with open(VERSIONS_DIR / "version_manifest.json", "r", encoding="utf-8") as f:
                 version_manifest = json.load(f)
             time.sleep(0.5)
-            splash.update_progress(100, "Prêt !")
+            splash.update_progress(100, "Ready!")
             time.sleep(0.3)
         except Exception as e:
             messagebox.showerror("Error", f"Unable to load manifest: {e}")
