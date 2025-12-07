@@ -6,6 +6,7 @@ from tkinter import ttk, messagebox
 import subprocess
 import threading
 import time
+import webbrowser
 from pathlib import Path
 
 # ------------------ File paths ------------------
@@ -20,7 +21,6 @@ for d in [BASE_DIR, VERSIONS_DIR, ASSETS_DIR, LIBRARIES_DIR, INDEXES_DIR, OBJECT
     d.mkdir(parents=True, exist_ok=True)
 
 VERSION_MANIFEST = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json"
-
 
 # ------------------ Center window ------------------
 def center_window(window, width, height):
@@ -85,6 +85,23 @@ class MiniLauncherApp:
         self.log_text_win = None
         self.log_buffer = []
 
+        # Menu bar (en haut)
+        menubar = tk.Menu(root)
+        file_menu = tk.Menu(menubar, tearoff=0)
+        file_menu.add_command(label="Settings", command=self.toggle_settings_window)
+        file_menu.add_command(label="Open folder", command=self.open_folder)
+        file_menu.add_command(label="Refresh versions", command=self.refresh_version_list)
+        file_menu.add_separator()
+        file_menu.add_command(label="Exit", command=root.quit)
+        menubar.add_cascade(label="Menu", menu=file_menu)
+
+        help_menu = tk.Menu(menubar, tearoff=0)
+        help_menu.add_command(label="About", command=lambda: messagebox.showinfo("About", "Mini Launcher Minecraft\nTest Build"))
+        help_menu.add_command(label="Open page", command=lambda: webbrowser.open("https://github.com/WindowsCraft76/mini-launcher-minecraft"))
+        menubar.add_cascade(label="Help", menu=help_menu)
+
+        root.config(menu=menubar)
+
         # UI
         tk.Label(root, text="Username:").pack(pady=2)
         self.username_entry = tk.Entry(root, textvariable=self.username_var)
@@ -140,6 +157,50 @@ class MiniLauncherApp:
         self.launch_btn.config(state=state)
         self.show_logs_btn.config(state=state)
 
+    # ------------------ Open folder ------------------
+    def open_folder(self):
+        folder_path = BASE_DIR
+        if os.name == "nt":
+            os.startfile(folder_path)
+
+    # ------------------ Create settings file ------------------
+    def create_txt_file():
+        current_dir = Path(__file__).parent
+        file_path = current_dir / "settings.txt"
+        try:
+            with open(file_path, "w") as f:
+                f.write("test\n")
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Impossible de créer le fichier:\n{e}")
+
+    # ------------------ Setting ------------------
+
+    def toggle_settings_window(self):
+        # Vérifie si la fenêtre existe et est valide
+        if getattr(self, "settings_window", None) and self.settings_window.winfo_exists():
+            try:
+                self.settings_window.deiconify()   # la remet visible si elle a été minimisée
+                self.settings_window.lift()        # la ramène au premier plan
+                self.settings_window.focus_force() # donne le focus
+            except Exception:
+                pass
+            return
+
+        # Sinon, crée la fenêtre
+        self.settings_window = tk.Toplevel(self.root)
+        self.settings_window.title("Settings - Mini Launcher Minecraft")
+        self.settings_window.resizable(False, False)
+        center_window(self.settings_window, 360, 220)
+
+        def _on_close():
+            try:
+                self.settings_window.destroy()
+            except Exception:
+                pass
+            self.settings_window = None
+
+        self.settings_window.protocol("WM_DELETE_WINDOW", _on_close)
+
     # ------------------ Logs ------------------
     def log(self, msg, kind="info"):
         timestamped = f"[{time.strftime('%H:%M:%S')}] {msg}"
@@ -162,7 +223,7 @@ class MiniLauncherApp:
             self.show_logs_btn.config(text="Show logs")
         else:
             self.log_window = tk.Toplevel(self.root)
-            self.log_window.title("Mini Launcher Minecraft Logs")
+            self.log_window.title("Logs - Mini Launcher Minecraft")
             self.log_window.geometry("600x300")
             self.log_window.protocol("WM_DELETE_WINDOW", self._on_close_log_window)
 
