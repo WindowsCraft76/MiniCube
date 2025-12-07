@@ -22,6 +22,7 @@ for d in [BASE_DIR, VERSIONS_DIR, ASSETS_DIR, LIBRARIES_DIR, INDEXES_DIR, OBJECT
 
 VERSION_MANIFEST = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json"
 
+
 # ------------------ Center window ------------------
 def center_window(window, width, height):
     screen_width = window.winfo_screenwidth()
@@ -29,6 +30,19 @@ def center_window(window, width, height):
     x = (screen_width - width) // 2
     y = (screen_height - height) // 2
     window.geometry(f"{width}x{height}+{x}+{y}")
+
+# ------------------ Read version.txt ------------------
+def get_info_version():
+    try:
+        version_file = Path(__file__).parent / "version.txt"
+        if version_file.exists():
+            with open(version_file, "r", encoding="utf-8") as f:
+                first_line = f.readline().strip()
+                return first_line if first_line else "Empty version.txt"
+        else:
+            return "No version info available"
+    except Exception as e:
+        return f"Error reading version.txt: {e}"
 
 
 # ------------------ Splash screen ------------------
@@ -68,7 +82,7 @@ class MiniLauncherApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Mini Launcher Minecraft")
-        self.root.geometry("400x350")
+        self.root.geometry("400x320")
 
         # Variables
         self.username_var = tk.StringVar(value="Steve")
@@ -85,18 +99,20 @@ class MiniLauncherApp:
         self.log_text_win = None
         self.log_buffer = []
 
-        # Menu bar (en haut)
+        # Menu bar
         menubar = tk.Menu(root)
         file_menu = tk.Menu(menubar, tearoff=0)
+        file_menu.add_command(label="Show logs", command=self.toggle_logs_window)
         file_menu.add_command(label="Settings", command=self.toggle_settings_window)
         file_menu.add_command(label="Open folder", command=self.open_folder)
-        file_menu.add_command(label="Refresh versions", command=self.refresh_version_list)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=root.quit)
         menubar.add_cascade(label="Menu", menu=file_menu)
 
         help_menu = tk.Menu(menubar, tearoff=0)
-        help_menu.add_command(label="About", command=lambda: messagebox.showinfo("About", "Mini Launcher Minecraft\nTest Build"))
+        help_menu.add_command(
+        label="About", 
+        command=lambda: messagebox.showinfo("About", f"Mini Launcher Minecraft\nCreate by WindowsCraft76\nVersion: {get_info_version()}"))
         help_menu.add_command(label="Open page", command=lambda: webbrowser.open("https://github.com/WindowsCraft76/mini-launcher-minecraft"))
         menubar.add_cascade(label="Help", menu=help_menu)
 
@@ -112,26 +128,15 @@ class MiniLauncherApp:
                                    textvariable=self.ram_var)
         self.ram_spin.pack(pady=2)
 
-        self.snapshot_check = tk.Checkbutton(root, text="Show snapshots",
-                                             variable=self.show_snapshots_var,
-                                             command=self.refresh_version_list)
-        self.snapshot_check.pack(pady=2)
-
-        self.old_check = tk.Checkbutton(root, text="Show historical versions",
-                                        variable=self.show_old_var,
-                                        command=self.refresh_version_list)
-        self.old_check.pack(pady=2)
-
         tk.Label(root, text="Version:").pack(pady=2)
         self.version_menu = ttk.Combobox(root, textvariable=self.version_var, state="readonly")
         self.version_menu.pack(pady=2)
 
-        # Button to show/hide logs window
-        self.show_logs_btn = tk.Button(root, text="Show logs", command=self.toggle_logs_window)
-        self.show_logs_btn.pack(pady=4)
+        self.snapshot_check = tk.Checkbutton(root, text="Show snapshots", variable=self.show_snapshots_var, command=self.refresh_version_list)
+        self.snapshot_check.pack(pady=2)
 
         self.launch_btn = tk.Button(root, text="Launch game", command=self.launch_game)
-        self.launch_btn.pack(pady=5)
+        self.launch_btn.place(x=root.winfo_width()//2, y=200, anchor="n")
 
         # Styled progress bar
         style = ttk.Style()
@@ -139,12 +144,18 @@ class MiniLauncherApp:
         style.configure("blue.Horizontal.TProgressbar", troughcolor='grey', background='green', thickness=20)
         self.progress_var = tk.DoubleVar(value=0.0)
         self.progress = ttk.Progressbar(root, style="blue.Horizontal.TProgressbar", variable=self.progress_var, maximum=1.0, length=350)
-        self.progress.pack(pady=2)
+        self.progress.place(x=root.winfo_width()//2, y=240, anchor="n")
         self.progress_label = tk.Label(root, text="Waiting...")
-        self.progress_label.pack(pady=2)
+        self.progress_label.place(x=root.winfo_width()//2, y=270, anchor="n")
 
         self.version_manifest = {}
         self.refresh_version_list()
+
+    # ------------------ Open folder ------------------
+    def open_folder(self):
+        folder_path = BASE_DIR
+        if os.name == "nt":
+            os.startfile(folder_path)
 
     # ------------------ UI lock/unlock ------------------
     def set_ui_state(self, enabled: bool):
@@ -153,18 +164,12 @@ class MiniLauncherApp:
         self.ram_spin.config(state=state)
         self.version_menu.config(state=state)
         self.snapshot_check.config(state=state)
-        self.old_check.config(state=state)
+        if getattr(self, "old_check", None):
+            self.old_check.config(state=state)
         self.launch_btn.config(state=state)
-        self.show_logs_btn.config(state=state)
-
-    # ------------------ Open folder ------------------
-    def open_folder(self):
-        folder_path = BASE_DIR
-        if os.name == "nt":
-            os.startfile(folder_path)
 
     # ------------------ Create settings file ------------------
-    def create_txt_file():
+    def create_txt_file(self):
         current_dir = Path(__file__).parent
         file_path = current_dir / "settings.txt"
         try:
@@ -174,23 +179,23 @@ class MiniLauncherApp:
             messagebox.showerror("Erreur", f"Impossible de créer le fichier:\n{e}")
 
     # ------------------ Setting ------------------
-
     def toggle_settings_window(self):
-        # Vérifie si la fenêtre existe et est valide
         if getattr(self, "settings_window", None) and self.settings_window.winfo_exists():
             try:
-                self.settings_window.deiconify()   # la remet visible si elle a été minimisée
-                self.settings_window.lift()        # la ramène au premier plan
-                self.settings_window.focus_force() # donne le focus
+                self.settings_window.deiconify()
+                self.settings_window.lift()
+                self.settings_window.focus_force()
             except Exception:
                 pass
             return
 
-        # Sinon, crée la fenêtre
         self.settings_window = tk.Toplevel(self.root)
         self.settings_window.title("Settings - Mini Launcher Minecraft")
         self.settings_window.resizable(False, False)
         center_window(self.settings_window, 360, 220)
+
+        self.old_check = tk.Checkbutton(self.settings_window, text="Show historical versions", variable=self.show_old_var, command=self.refresh_version_list)
+        self.old_check.pack(pady=1)
 
         def _on_close():
             try:
@@ -198,6 +203,12 @@ class MiniLauncherApp:
             except Exception:
                 pass
             self.settings_window = None
+            if getattr(self, "old_check", None):
+                try:
+                    self.old_check.destroy()
+                except Exception:
+                    pass
+                self.old_check = None
 
         self.settings_window.protocol("WM_DELETE_WINDOW", _on_close)
 
@@ -216,11 +227,10 @@ class MiniLauncherApp:
                 pass
 
     def toggle_logs_window(self):
-        if self.log_window and tk.Toplevel.winfo_exists(self.log_window):
-            self.log_window.destroy()
-            self.log_window = None
-            self.log_text_win = None
-            self.show_logs_btn.config(text="Show logs")
+        if self.log_window and self.log_window.winfo_exists():
+            self.log_window.deiconify()
+            self.log_window.lift() 
+            self.log_window.focus_force()
         else:
             self.log_window = tk.Toplevel(self.root)
             self.log_window.title("Logs - Mini Launcher Minecraft")
@@ -243,7 +253,6 @@ class MiniLauncherApp:
                     self.log_text_win.insert(tk.END, line + "\n")
             self.log_text_win.see(tk.END)
 
-            self.show_logs_btn.config(text="Hide logs")
 
     def _on_close_log_window(self):
         if self.log_window:
@@ -253,7 +262,6 @@ class MiniLauncherApp:
                 pass
         self.log_window = None
         self.log_text_win = None
-        self.show_logs_btn.config(text="Show logs")
 
     # ------------------ Versions ------------------
     def refresh_version_list(self):
