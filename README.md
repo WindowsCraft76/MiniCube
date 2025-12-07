@@ -3,7 +3,6 @@
 
 ### Project Overview: 
 This is a launcher for Java Minecraft that doesn't require an official (cracked) account and is easy to use.
-You need to install Python to run the launcher: https://www.python.org/downloads/
 
 I don't plan to release regular updates.
 
