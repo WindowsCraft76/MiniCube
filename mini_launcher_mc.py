@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os
 import json
 import urllib.request
@@ -22,6 +23,9 @@ for d in [BASE_DIR, VERSIONS_DIR, ASSETS_DIR, LIBRARIES_DIR, INDEXES_DIR, OBJECT
 
 VERSION_MANIFEST = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json"
 
+PAGE_URL = "https://github.com/WindowsCraft76/mini-launcher-minecraft"
+REMOTE_VERSION_URL = "https://raw.githubusercontent.com/WindowsCraft76/mini-launcher-minecraft/refs/heads/main/version.txt"
+UPDATE_PAGE_URL = "https://github.com/WindowsCraft76/mini-launcher-minecraft/releases"
 
 # ------------------ Center window ------------------
 def center_window(window, width, height):
@@ -31,7 +35,7 @@ def center_window(window, width, height):
     y = (screen_height - height) // 2
     window.geometry(f"{width}x{height}+{x}+{y}")
 
-# ------------------ Read version.txt ------------------
+# ------------------ Read version.txt (local) ------------------
 def get_info_version():
     try:
         version_file = Path(__file__).parent / "version.txt"
@@ -44,6 +48,20 @@ def get_info_version():
     except Exception as e:
         return f"Error reading version.txt: {e}"
 
+# ------------------ Read remote version ------------------
+def get_remote_version():
+    try:
+        with urllib.request.urlopen(REMOTE_VERSION_URL, timeout=6) as resp:
+            text = resp.read().decode("utf-8")
+            # on prend la première ligne non vide
+            for line in text.splitlines():
+                line = line.strip()
+                if line:
+                    return line
+            return "Empty remote version"
+    except Exception as e:
+        return f"Error fetching remote version: {e}"
+
 
 # ------------------ Splash screen ------------------
 class SplashScreen:
@@ -55,7 +73,7 @@ class SplashScreen:
         center_window(self.window, 350, 150)
         self.window.configure(bg="black")
 
-        self.label = tk.Label(self.window, text="Mini Launcher Minecraft\nLoading...", 
+        self.label = tk.Label(self.window, text="Mini Launcher Minecraft\nLoading...",
                               font=("Arial", 14), fg="white", bg="black")
         self.label.pack(expand=True)
 
@@ -100,23 +118,26 @@ class MiniLauncherApp:
         self.log_buffer = []
 
         # Menu bar
-        menubar = tk.Menu(root)
-        file_menu = tk.Menu(menubar, tearoff=0)
+        self.menubar = tk.Menu(root)
+        file_menu = tk.Menu(self.menubar, tearoff=0)
         file_menu.add_command(label="Show logs", command=self.toggle_logs_window)
         file_menu.add_command(label="Settings", command=self.toggle_settings_window)
         file_menu.add_command(label="Open folder", command=self.open_folder)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=root.quit)
-        menubar.add_cascade(label="Menu", menu=file_menu)
+        self.menubar.add_cascade(label="Menu", menu=file_menu)
 
-        help_menu = tk.Menu(menubar, tearoff=0)
+        help_menu = tk.Menu(self.menubar, tearoff=0)
         help_menu.add_command(
-        label="About", 
-        command=lambda: messagebox.showinfo("About", f"Mini Launcher Minecraft\nCreate by WindowsCraft76\nVersion: {get_info_version()}"))
-        help_menu.add_command(label="Open page", command=lambda: webbrowser.open("https://github.com/WindowsCraft76/mini-launcher-minecraft"))
-        menubar.add_cascade(label="Help", menu=help_menu)
+            label="About",
+            command=lambda: messagebox.showinfo("About", f"Mini Launcher Minecraft\nCreate by WindowsCraft76\nVersion: {get_info_version()}"))
+        help_menu.add_command(label="Open page", command=lambda: webbrowser.open(PAGE_URL))
+        self.menubar.add_cascade(label="Help", menu=help_menu)
 
-        root.config(menu=menubar)
+        root.config(menu=self.menubar)
+
+        self.UPDATE_LABEL = "New update available"
+
 
         # UI
         tk.Label(root, text="Username:").pack(pady=2)
@@ -149,7 +170,75 @@ class MiniLauncherApp:
         self.progress_label.place(x=root.winfo_width()//2, y=270, anchor="n")
 
         self.version_manifest = {}
+        self.check_version_mismatch_async()
         self.refresh_version_list()
+
+
+    # ------------------ Version mismatch check ------------------
+    def check_version_mismatch(self):
+        local = get_info_version()
+        remote = get_remote_version()
+        if remote.startswith("Error"):
+            self._remove_update_menu_entry()
+            try:
+                self.update_btn.pack_forget()
+            except Exception:
+                pass
+            return
+
+        if str(local).strip() != str(remote).strip():
+            self._add_update_menu_entry()
+        else:
+            self._remove_update_menu_entry()
+            try:
+                self.update_btn.pack_forget()
+            except Exception:
+                pass
+
+    def check_version_mismatch_async(self):
+        """Lance check_version_mismatch dans un thread pour ne pas bloquer l'UI."""
+        threading.Thread(target=self._check_version_thread, daemon=True).start()
+
+    def _check_version_thread(self):
+        try:
+            self.check_version_mismatch()
+        except Exception as e:
+            try:
+                self.log(f"Erreur check_version_mismatch: {e}", "error")
+            except Exception:
+                pass
+
+
+    def _find_menu_index_by_label(self, label):
+        """Retourne l'index d'une entrée de menu dans self.menubar correspondant au label, ou None."""
+        try:
+            end = self.menubar.index("end")
+            if end is None:
+                return None
+            for i in range(end + 1):
+                try:
+                    lbl = self.menubar.entrycget(i, "label")
+                    if lbl == label:
+                        return i
+                except Exception:
+                    continue
+        except Exception:
+            return None
+        return None
+
+    def _add_update_menu_entry(self):
+        """Ajoute l'entrée dans la menubar si elle n'existe pas."""
+        if self._find_menu_index_by_label(self.UPDATE_LABEL) is None:
+            self.menubar.add_command(label=self.UPDATE_LABEL, command=lambda: webbrowser.open(UPDATE_PAGE_URL))
+
+    def _remove_update_menu_entry(self):
+        """Supprime l'entrée update si elle existe."""
+        idx = self._find_menu_index_by_label(self.UPDATE_LABEL)
+        if idx is not None:
+            try:
+                self.menubar.delete(idx)
+            except Exception:
+                pass
 
     # ------------------ Open folder ------------------
     def open_folder(self):
@@ -229,7 +318,7 @@ class MiniLauncherApp:
     def toggle_logs_window(self):
         if self.log_window and self.log_window.winfo_exists():
             self.log_window.deiconify()
-            self.log_window.lift() 
+            self.log_window.lift()
             self.log_window.focus_force()
         else:
             self.log_window = tk.Toplevel(self.root)
@@ -289,6 +378,9 @@ class MiniLauncherApp:
         self.version_menu["values"] = version_ids
         if version_ids:
             self.version_var.set(version_ids[0])
+
+        # re-check version mismatch après rafraîchissement
+        self.check_version_mismatch_async()
 
     # ------------------ Progress ------------------
     def update_progress(self, done, total, text=""):
@@ -488,7 +580,7 @@ def main():
             splash.close()
             root.deiconify()
             app = MiniLauncherApp(root)
-    
+
     threading.Thread(target=init_launcher, daemon=True).start()
     root.mainloop()
 
