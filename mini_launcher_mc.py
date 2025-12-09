@@ -22,10 +22,8 @@ for d in [BASE_DIR, VERSIONS_DIR, ASSETS_DIR, LIBRARIES_DIR, INDEXES_DIR, OBJECT
     d.mkdir(parents=True, exist_ok=True)
 
 VERSION_MANIFEST = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json"
-
 PAGE_URL = "https://github.com/WindowsCraft76/mini-launcher-minecraft"
 REMOTE_VERSION_URL = "https://raw.githubusercontent.com/WindowsCraft76/mini-launcher-minecraft/refs/heads/main/version.txt"
-UPDATE_PAGE_URL = "https://github.com/WindowsCraft76/mini-launcher-minecraft/releases"
 
 # ------------------ Center window ------------------
 def center_window(window, width, height):
@@ -53,7 +51,6 @@ def get_remote_version():
     try:
         with urllib.request.urlopen(REMOTE_VERSION_URL, timeout=6) as resp:
             text = resp.read().decode("utf-8")
-            # on prend la première ligne non vide
             for line in text.splitlines():
                 line = line.strip()
                 if line:
@@ -61,39 +58,8 @@ def get_remote_version():
             return "Empty remote version"
     except Exception as e:
         return f"Error fetching remote version: {e}"
-
-
-# ------------------ Splash screen ------------------
-class SplashScreen:
-    def __init__(self, root):
-        self.root = root
-        self.window = tk.Toplevel(root)
-        self.window.resizable(False, False)
-        self.window.overrideredirect(True)
-        center_window(self.window, 350, 150)
-        self.window.configure(bg="black")
-
-        self.label = tk.Label(self.window, text="Mini Launcher Minecraft\nLoading...",
-                              font=("Arial", 14), fg="white", bg="black")
-        self.label.pack(expand=True)
-
-        self.progress_var = tk.DoubleVar(value=0.0)
-        self.progress = ttk.Progressbar(self.window, variable=self.progress_var, maximum=100, length=300)
-        self.progress.pack(pady=10)
-
-        self.status_var = tk.StringVar(value="Initialization...")
-        self.status_label = tk.Label(self.window, textvariable=self.status_var, fg="white", bg="black")
-        self.status_label.pack()
-
-    def update_progress(self, percent, text=None):
-        self.progress_var.set(percent)
-        if text:
-            self.status_var.set(text)
-        self.window.update_idletasks()
-
-    def close(self):
-        self.window.destroy()
-
+    
+UPDATE_PAGE_URL = f"https://github.com/WindowsCraft76/mini-launcher-minecraft/releases/tag/{get_remote_version()}"
 
 # ------------------ Main Launcher ------------------
 class MiniLauncherApp:
@@ -101,6 +67,7 @@ class MiniLauncherApp:
         self.root = root
         self.root.title("Mini Launcher Minecraft")
         self.root.geometry("400x320")
+        self.root.resizable(False, False)
 
         # Variables
         self.username_var = tk.StringVar(value="Steve")
@@ -118,26 +85,25 @@ class MiniLauncherApp:
         self.log_buffer = []
 
         # Menu bar
-        self.menubar = tk.Menu(root)
-        file_menu = tk.Menu(self.menubar, tearoff=0)
-        file_menu.add_command(label="Show logs", command=self.toggle_logs_window)
-        file_menu.add_command(label="Settings", command=self.toggle_settings_window)
-        file_menu.add_command(label="Open folder", command=self.open_folder)
-        file_menu.add_separator()
-        file_menu.add_command(label="Exit", command=root.quit)
-        self.menubar.add_cascade(label="Menu", menu=file_menu)
+        self.toolbar = tk.Menu(root)
+        menu = tk.Menu(self.toolbar, tearoff=0)
+        menu.add_command(label="Show logs", command=self.toggle_logs_window)
+        menu.add_command(label="Settings", command=self.toggle_settings_window)
+        menu.add_command(label="Open folder", command=self.open_folder)
+        menu.add_separator()
+        menu.add_command(label="Exit", command=root.quit)
+        self.toolbar.add_cascade(label="Menu", menu=menu)
 
-        help_menu = tk.Menu(self.menubar, tearoff=0)
-        help_menu.add_command(
+        help = tk.Menu(self.toolbar, tearoff=0)
+        help.add_command(
             label="About",
             command=lambda: messagebox.showinfo("About", f"Mini Launcher Minecraft\nCreate by WindowsCraft76\nVersion: {get_info_version()}"))
-        help_menu.add_command(label="Open page", command=lambda: webbrowser.open(PAGE_URL))
-        self.menubar.add_cascade(label="Help", menu=help_menu)
+        help.add_command(label="Open page", command=lambda: webbrowser.open(PAGE_URL))
+        self.toolbar.add_cascade(label="Help", menu=help)
 
-        root.config(menu=self.menubar)
+        root.config(menu=self.toolbar)
 
         self.UPDATE_LABEL = "New update available"
-
 
         # UI
         tk.Label(root, text="Username:").pack(pady=2)
@@ -157,7 +123,7 @@ class MiniLauncherApp:
         self.snapshot_check.pack(pady=2)
 
         self.launch_btn = tk.Button(root, text="Launch game", command=self.launch_game)
-        self.launch_btn.place(x=root.winfo_width()//2, y=200, anchor="n")
+        self.launch_btn.pack(pady=(20, 5))
 
         # Styled progress bar
         style = ttk.Style()
@@ -165,21 +131,20 @@ class MiniLauncherApp:
         style.configure("blue.Horizontal.TProgressbar", troughcolor='grey', background='green', thickness=20)
         self.progress_var = tk.DoubleVar(value=0.0)
         self.progress = ttk.Progressbar(root, style="blue.Horizontal.TProgressbar", variable=self.progress_var, maximum=1.0, length=350)
-        self.progress.place(x=root.winfo_width()//2, y=240, anchor="n")
+        self.progress.pack(pady=5)
         self.progress_label = tk.Label(root, text="Waiting...")
-        self.progress_label.place(x=root.winfo_width()//2, y=270, anchor="n")
+        self.progress_label.pack(pady=(5, 10))
 
         self.version_manifest = {}
         self.check_version_mismatch_async()
         self.refresh_version_list()
-
 
     # ------------------ Version mismatch check ------------------
     def check_version_mismatch(self):
         local = get_info_version()
         remote = get_remote_version()
         if remote.startswith("Error"):
-            self._remove_update_menu_entry()
+            self._remove_update_toolbar_entry()
             try:
                 self.update_btn.pack_forget()
             except Exception:
@@ -187,16 +152,15 @@ class MiniLauncherApp:
             return
 
         if str(local).strip() != str(remote).strip():
-            self._add_update_menu_entry()
+            self._add_update_toolbar_entry()
         else:
-            self._remove_update_menu_entry()
+            self._remove_update_toolbar_entry()
             try:
                 self.update_btn.pack_forget()
             except Exception:
                 pass
 
     def check_version_mismatch_async(self):
-        """Lance check_version_mismatch dans un thread pour ne pas bloquer l'UI."""
         threading.Thread(target=self._check_version_thread, daemon=True).start()
 
     def _check_version_thread(self):
@@ -208,16 +172,14 @@ class MiniLauncherApp:
             except Exception:
                 pass
 
-
-    def _find_menu_index_by_label(self, label):
-        """Retourne l'index d'une entrée de menu dans self.menubar correspondant au label, ou None."""
+    def _find_toolbar_index_by_label(self, label):
         try:
-            end = self.menubar.index("end")
+            end = self.toolbar.index("end")
             if end is None:
                 return None
             for i in range(end + 1):
                 try:
-                    lbl = self.menubar.entrycget(i, "label")
+                    lbl = self.toolbar.entrycget(i, "label")
                     if lbl == label:
                         return i
                 except Exception:
@@ -226,17 +188,18 @@ class MiniLauncherApp:
             return None
         return None
 
-    def _add_update_menu_entry(self):
-        """Ajoute l'entrée dans la menubar si elle n'existe pas."""
-        if self._find_menu_index_by_label(self.UPDATE_LABEL) is None:
-            self.menubar.add_command(label=self.UPDATE_LABEL, command=lambda: webbrowser.open(UPDATE_PAGE_URL))
+    def _add_update_toolbar_entry(self):
+        if self._find_toolbar_index_by_label(self.UPDATE_LABEL) is None:
+            self.toolbar.add_command(label=self.UPDATE_LABEL, command=lambda: webbrowser.open(UPDATE_PAGE_URL))
+            answer = messagebox.askyesno("New update available", f"The new version {get_remote_version()} is available!\nDo you want to open the version page?")
+            if answer:
+                webbrowser.open(UPDATE_PAGE_URL)
 
-    def _remove_update_menu_entry(self):
-        """Supprime l'entrée update si elle existe."""
-        idx = self._find_menu_index_by_label(self.UPDATE_LABEL)
+    def _remove_update_toolbar_entry(self):
+        idx = self._find_toolbar_index_by_label(self.UPDATE_LABEL)
         if idx is not None:
             try:
-                self.menubar.delete(idx)
+                self.toolbar.delete(idx)
             except Exception:
                 pass
 
@@ -256,16 +219,6 @@ class MiniLauncherApp:
         if getattr(self, "old_check", None):
             self.old_check.config(state=state)
         self.launch_btn.config(state=state)
-
-    # ------------------ Create settings file ------------------
-    def create_txt_file(self):
-        current_dir = Path(__file__).parent
-        file_path = current_dir / "settings.txt"
-        try:
-            with open(file_path, "w") as f:
-                f.write("test\n")
-        except Exception as e:
-            messagebox.showerror("Erreur", f"Impossible de créer le fichier:\n{e}")
 
     # ------------------ Setting ------------------
     def toggle_settings_window(self):
@@ -342,7 +295,6 @@ class MiniLauncherApp:
                     self.log_text_win.insert(tk.END, line + "\n")
             self.log_text_win.see(tk.END)
 
-
     def _on_close_log_window(self):
         if self.log_window:
             try:
@@ -379,7 +331,6 @@ class MiniLauncherApp:
         if version_ids:
             self.version_var.set(version_ids[0])
 
-        # re-check version mismatch après rafraîchissement
         self.check_version_mismatch_async()
 
     # ------------------ Progress ------------------
@@ -425,7 +376,6 @@ class MiniLauncherApp:
             tmp_path.rename(version_jar_path)
             self.log(f"Downloaded {version_id}.jar", "success")
 
-        # Assets
         asset_index_id = version_data["assetIndex"]["id"]
         asset_index_url = version_data["assetIndex"]["url"]
         asset_index_path = INDEXES_DIR / f"{asset_index_id}.json"
@@ -437,7 +387,6 @@ class MiniLauncherApp:
             asset_index = json.load(f)
         objects = asset_index.get("objects", {})
 
-        # Libraries and assets tasks
         tasks = []
         for lib in version_data.get("libraries", []):
             if "downloads" in lib and "artifact" in lib["downloads"]:
@@ -452,7 +401,6 @@ class MiniLauncherApp:
             obj_path = OBJECTS_DIR / subdir / hash_val
             tasks.append(("asset", obj_path, url))
 
-        # Download with progress
         done = 0
         total = len(tasks)
         start_time = time.time()
@@ -558,32 +506,10 @@ class MiniLauncherApp:
 # ------------------ Main ------------------
 def main():
     root = tk.Tk()
-    root.resizable(False, False)
-    root.withdraw()
 
-    splash = SplashScreen(root)
+    app = MiniLauncherApp(root)
 
-    def init_launcher():
-        try:
-            splash.update_progress(0, "Downloading the manifest...")
-            urllib.request.urlretrieve(VERSION_MANIFEST, VERSIONS_DIR / "version_manifest.json")
-            splash.update_progress(50, "Loading versions...")
-
-            with open(VERSIONS_DIR / "version_manifest.json", "r", encoding="utf-8") as f:
-                version_manifest = json.load(f)
-            time.sleep(0.5)
-            splash.update_progress(100, "Ready!")
-            time.sleep(0.3)
-        except Exception as e:
-            messagebox.showerror("Error", f"Unable to load manifest: {e}")
-        finally:
-            splash.close()
-            root.deiconify()
-            app = MiniLauncherApp(root)
-
-    threading.Thread(target=init_launcher, daemon=True).start()
     root.mainloop()
-
 
 if __name__ == "__main__":
     main()
