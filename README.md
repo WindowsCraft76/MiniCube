@@ -13,10 +13,10 @@ I don't plan to release regular updates.
 - Live log window
 
 ### Choose a feature:
+- Installing Java internal to the launcher
 - Instance system
 - Language system
-- Update system
-- Change language to avoid installing Python
+- ~~Update system~~
 - Icon
 - Modernize interface
 - More game launch options
