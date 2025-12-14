@@ -7,6 +7,8 @@ import subprocess
 import threading
 import time
 import webbrowser
+import zipfile
+import platform
 from pathlib import Path
 
 # ------------------ File paths ------------------
@@ -16,8 +18,9 @@ ASSETS_DIR = BASE_DIR / "assets"
 LIBRARIES_DIR = BASE_DIR / "libraries"
 INDEXES_DIR = ASSETS_DIR / "indexes"
 OBJECTS_DIR = ASSETS_DIR / "objects"
+JAVA_DIR = BASE_DIR / "java_versions"
 
-for d in [BASE_DIR, VERSIONS_DIR, ASSETS_DIR, LIBRARIES_DIR, INDEXES_DIR, OBJECTS_DIR]:
+for d in [BASE_DIR, VERSIONS_DIR, ASSETS_DIR, LIBRARIES_DIR, INDEXES_DIR, OBJECTS_DIR, JAVA_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
 VERSION_MANIFEST = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json"
@@ -96,7 +99,7 @@ class MiniLauncherApp:
         help = tk.Menu(self.toolbar, tearoff=0)
         help.add_command(
             label="About",
-            command=lambda: messagebox.showinfo("About", f"Mini Launcher Minecraft\nCreate by WindowsCraft76\nVersion: {get_info_version()}"))
+            command=lambda: messagebox.showinfo("About", f"Mini Launcher Minecraft\n\nCreate by WindowsCraft76\nVersion: {get_info_version()}"))
         help.add_command(label="Open page", command=lambda: webbrowser.open(PAGE_URL))
         self.toolbar.add_cascade(label="Help", menu=help)
 
@@ -137,6 +140,14 @@ class MiniLauncherApp:
         self.version_manifest = {}
         self.check_version_mismatch_async()
         self.refresh_version_list()
+
+    # ------------------ Get required Java version ------------------
+    def get_required_java_version(self, version_data):
+
+        java_info = version_data.get("javaVersion")
+        if not java_info:
+            return 8
+        return java_info.get("majorVersion", 8)
 
     # ------------------ Version mismatch check ------------------
     def check_version_mismatch(self):
@@ -388,9 +399,19 @@ class MiniLauncherApp:
 
         tasks = []
         for lib in version_data.get("libraries", []):
-            if "downloads" in lib and "artifact" in lib["downloads"]:
-                path = lib["downloads"]["artifact"]["path"]
-                url = lib["downloads"]["artifact"]["url"]
+            downloads = lib.get("downloads")
+            if not downloads:
+                continue
+            artifact = downloads.get("artifact")
+            if artifact:
+                path = artifact["path"]
+                url = artifact["url"]
+                lib_path = LIBRARIES_DIR / path
+                tasks.append(("lib", lib_path, url))
+            classifiers = downloads.get("classifiers", {})
+            for classifier in classifiers.values():
+                path = classifier["path"]
+                url = classifier["url"]
                 lib_path = LIBRARIES_DIR / path
                 tasks.append(("lib", lib_path, url))
         for name, obj in objects.items():
@@ -424,8 +445,127 @@ class MiniLauncherApp:
             remaining_str = self.format_duration(remaining)
             self.update_progress(done, total, f"{done}/{total} files - remaining {remaining_str}")
 
-        self.update_progress(total, total, "Ready!")
+        self.update_progress(total, total, "Download finished!")
         return version_data, version_jar_path
+
+    # ------------------ Ensure Java installed ------------------
+    def ensure_java_installed(self, major_version: int):
+
+        for item in JAVA_DIR.iterdir():
+            if not item.is_dir():
+                continue
+
+            name = item.name.lower()
+            if not name.startswith(f"zulu{major_version}"):
+                continue
+
+            javaw = item / "bin" / "javaw.exe"
+            if javaw.exists():
+                self.log(f"Java {major_version} already present", "info")
+                return javaw
+
+        self.log(f"Downloading Java {major_version}...", "info")
+
+        api_url = (
+            "https://api.azul.com/metadata/v1/zulu/packages/"
+            f"?java_version={major_version}"
+            "&os=windows"
+            "&java_package_type=jre"
+            "&javafx_bundled=false"
+        )
+
+        with urllib.request.urlopen(api_url) as resp:
+            packages = json.load(resp)
+
+        if not packages:
+            raise Exception(f"No Java package found for Java {major_version}", "error")
+            self.log(f"No Java package found for Java {major_version}", "error")
+
+        pkg = packages[0]
+        download_url = pkg["download_url"]
+        zip_name = Path(download_url).name
+        zip_path = JAVA_DIR / zip_name
+
+        self.root.after(0, lambda: self.progress_label.config(text=f"Downloading Java..."))
+        urllib.request.urlretrieve(download_url, zip_path)
+
+        import zipfile
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            zip_ref.extractall(JAVA_DIR)
+
+        zip_path.unlink(missing_ok=True)
+
+        for item in JAVA_DIR.iterdir():
+            if not item.is_dir():
+                continue
+
+            name = item.name.lower()
+            if not name.startswith(f"zulu{major_version}"):
+                continue
+
+            javaw = item / "bin" / "javaw.exe"
+            if javaw.exists():
+                self.log(f"Java {major_version} installed successfully!", "success")
+                return javaw
+
+        raise Exception(f"javaw.exe for Java {major_version} not found", "error")
+        self.log(f"javaw.exe for Java {major_version} not found", "error")
+
+    # ------------------ Extract natives ------------------
+    def extract_natives(self, version_data):
+
+        version_id = version_data["id"]
+
+        natives_dir = BASE_DIR / "natives" / version_id
+        natives_dir.mkdir(parents=True, exist_ok=True)
+
+        system = platform.system().lower()
+        if system.startswith("win"):
+            os_name = "windows"
+        elif system.startswith("linux"):
+            os_name = "linux"
+        elif system.startswith("darwin"):
+            os_name = "osx"
+        else:
+            raise Exception(f"Unsupported OS: {system}")
+
+        self.log(f"Extracting natives for {version_id}...", "info")
+
+        self.root.after(0, lambda: self.progress_label.config(text=f"Extracting natives..."))
+        for lib in version_data.get("libraries", []):
+            natives = lib.get("natives")
+            downloads = lib.get("downloads")
+
+            if not natives or not downloads:
+                continue
+
+            classifier_key = natives.get(os_name)
+            if not classifier_key:
+                continue
+
+            classifiers = downloads.get("classifiers", {})
+            native_info = classifiers.get(classifier_key)
+            if not native_info:
+                continue
+
+            jar_path = LIBRARIES_DIR / native_info["path"]
+            if not jar_path.exists():
+                self.log(f"Missing native jar: {jar_path}", "error")
+                continue
+
+            try:
+                with zipfile.ZipFile(jar_path, "r") as z:
+                    for member in z.namelist():
+                        if member.startswith("META-INF/"):
+                            continue
+                        z.extract(member, natives_dir)
+            except Exception as e:
+                self.log(f"Failed to extract natives from {jar_path}: {e}", "error")
+
+        self.log(f"Natives extracted to {natives_dir}", "success")
+
+        return natives_dir
+
 
     # ------------------ Launch ------------------
     def launch_game(self):
@@ -466,13 +606,23 @@ class MiniLauncherApp:
                     classpath.append(str(jar_path))
         classpath.append(str(version_jar_path))
 
+        version_jar = VERSIONS_DIR / version_id / f"{version_id}.jar"
+        classpath.append(str(version_jar))
+
         cp_str = os.pathsep.join(classpath)
+        java_major = self.get_required_java_version(version_data)
+        self.root.after(0, lambda: self.progress_label.config(text=f"Download Java..."))
+        java_path = self.ensure_java_installed(java_major)
+        main_class = version_data.get("mainClass", "net.minecraft.client.main.Main")
+        natives_dir = self.extract_natives(version_data)
+
         args = [
-            "java",
+            str(java_path),
+            f"-Djava.library.path={natives_dir}",
             f"-Xms{ram}M",
             f"-Xmx{ram}M",
             "-cp", cp_str,
-            "net.minecraft.client.main.Main",
+            main_class,
             "--username", username,
             "--version", version_id,
             "--gameDir", str(BASE_DIR),
@@ -482,9 +632,10 @@ class MiniLauncherApp:
             "--accessToken", "0"
         ]
 
-        self.log(f"[Launcher] Command: {' '.join(args)}", "info")
+        self.log(f"Command: {' '.join(args)}", "info")
 
         try:
+            self.root.after(0, lambda: self.progress_label.config(text="Ready!"))
             game_process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         except Exception as e:
             self.log(f"[ERROR] Unable to start Java process: {e}", "error")
@@ -498,7 +649,7 @@ class MiniLauncherApp:
 
         self.root.after(0, lambda: self.launch_btn.config(text="Launch game"))
         self.root.after(0, lambda: self.set_ui_state(True))
-        self.root.after(0, lambda: self.progress_label.config(text="Game closed."))
+        self.root.after(0, lambda: self.progress_label.config(text="Game closed"))
         self.log("=== Game finished ===", "info")
 
 
