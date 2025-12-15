@@ -562,7 +562,7 @@ class MiniLauncherApp:
             except Exception as e:
                 self.log(f"Failed to extract natives from {jar_path}: {e}", "error")
 
-        self.log(f"Natives extracted to {natives_dir}", "success")
+        self.log(f"Natives successfully extracted!", "success")
 
         return natives_dir
 
