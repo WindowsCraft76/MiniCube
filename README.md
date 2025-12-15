@@ -13,7 +13,7 @@ I don't plan to release regular updates.
 - Live log window
 
 ### Choose a feature:
-- Installing Java internal to the launcher
+- ~~Installing Java internal to the launcher~~
 - Instance system
 - Language system
 - ~~Update system~~
