@@ -7,5 +7,4 @@ logs/
 python-3.14.2-win32/
 
 # Ignore application files/folders
-version.txt
 debug.bat
