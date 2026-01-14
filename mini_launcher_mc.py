@@ -2,7 +2,6 @@ import os
 import json
 import urllib.request
 import tkinter as tk
-from tkinter import ttk, messagebox
 import subprocess
 import threading
 import time
@@ -10,6 +9,7 @@ import webbrowser
 import zipfile
 import platform
 from pathlib import Path
+from tkinter import ttk, messagebox
 
 # ------------------ File paths ------------------
 BASE_DIR = Path(__file__).resolve().parent / "GameFile"
@@ -70,6 +70,7 @@ class MiniLauncherApp:
         self.root.title("Mini Launcher Minecraft")
         self.root.geometry("400x320")
         self.root.resizable(False, False)
+        #root.iconbitmap("icon.ico")
 
         # Variables
         self.username_var = tk.StringVar(value="Steve")
