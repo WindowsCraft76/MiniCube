@@ -2,7 +2,7 @@
 *A launcher Minecraft with a simple and easy-to-use interface!*
 
 ### Project Overview: 
-This is a Minecraft Java launcher that doesn't require an official (hacked) account and is easy to use.
+This is a Minecraft Java launcher that doesn't require an official (cracket) account and is easy to use.
 
 **I don't plan to release regular updates.**
 
