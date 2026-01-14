@@ -1,10 +1,10 @@
 # Mini Launcher Minecraft - [Download Page](https://github.com/WindowsCraft76/mini-launcher-minecraft/releases)
-*A launcher with a simple and easy-to-use interface!*
+*A launcher Minecraft with a simple and easy-to-use interface!*
 
 ### Project Overview: 
-This is a launcher for Java Minecraft that doesn't require an official (cracked) account and is easy to use.
+This is a Minecraft Java launcher that doesn't require an official (hacked) account and is easy to use.
 
-I don't plan to release regular updates.
+**I don't plan to release regular updates.**
 
 ### Features:
 - All versions of Minecraft and automatic addition of new ones
@@ -16,7 +16,7 @@ I don't plan to release regular updates.
 - ~~Installing Java internal to the launcher~~
 - Instance system
 - Language system
-- ~~Update system~~
+- Update system
 - Icon
 - Modernize interface
 - More game launch options
