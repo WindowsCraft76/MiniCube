@@ -70,7 +70,7 @@ class MiniLauncherApp:
         self.root.title("Mini Launcher Minecraft")
         self.root.geometry("400x320")
         self.root.resizable(False, False)
-        #root.iconbitmap("icon.ico")
+        root.iconbitmap("icon_32px.ico")
 
         # Variables
         self.username_var = tk.StringVar(value="Steve")
@@ -245,6 +245,7 @@ class MiniLauncherApp:
         self.settings_window = tk.Toplevel(self.root)
         self.settings_window.title("Settings - Mini Launcher Minecraft")
         self.settings_window.resizable(False, False)
+        self.settings_window.iconbitmap("icon_32px.ico")
         center_window(self.settings_window, 360, 220)
 
         self.old_check = tk.Checkbutton(self.settings_window, text="Show historical versions", variable=self.show_old_var, command=self.refresh_version_list)
@@ -287,6 +288,7 @@ class MiniLauncherApp:
         else:
             self.log_window = tk.Toplevel(self.root)
             self.log_window.title("Logs - Mini Launcher Minecraft")
+            self.log_window.iconbitmap("icon_32px.ico")
             self.log_window.geometry("600x300")
             self.log_window.protocol("WM_DELETE_WINDOW", self._on_close_log_window)
 
