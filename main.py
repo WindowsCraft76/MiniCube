@@ -9,6 +9,7 @@ import webbrowser
 import zipfile
 import platform
 import winreg
+import re
 from pathlib import Path
 from tkinter import ttk, messagebox
 
@@ -30,7 +31,7 @@ SETTINGS_FILE = BASE_DIR / "settings.json"
 
 VERSION_MANIFEST = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json"
 PAGE_URL = "https://github.com/WindowsCraft76/mini-launcher-minecraft"
-REMOTE_VERSION_URL = "https://raw.githubusercontent.com/WindowsCraft76/mini-launcher-minecraft/refs/heads/main/version.txt"
+REPO_URL = "https://github.com/WindowsCraft76/mini-launcher-minecraft.git"
 
 # ------------------ Center window ------------------
 def center_window(window, width, height):
@@ -68,25 +69,44 @@ def get_info_version():
 # ------------------ Read remote version ------------------
 def get_remote_version():
     try:
-        with urllib.request.urlopen(REMOTE_VERSION_URL, timeout=6) as resp:
-            text = resp.read().decode("utf-8")
-            for line in text.splitlines():
-                line = line.strip()
-                if line:
-                    return line
-            return "Empty remote version"
+        result = subprocess.run(
+            ["git", "ls-remote", "--tags", "--sort=-v:refname", REPO_URL],
+            capture_output=True,
+            text=True,
+            timeout=6,
+            check=True
+        )
+
+        lines = result.stdout.strip().splitlines()
+        if not lines:
+            return "No tags found"
+
+        last_tag_line = lines[0]
+        tag_ref = last_tag_line.split("\t")[1]
+
+        tag_name = tag_ref.replace("refs/tags/", "").replace("^{}", "")
+        return tag_name
+
     except Exception as e:
         return f"Error fetching remote version: {e}"
     
 UPDATE_PAGE_URL = f"https://github.com/WindowsCraft76/mini-launcher-minecraft/releases/tag/{get_remote_version()}"
 
+def _normalize_version(version: str):
+    version = version.strip().lower().lstrip("v")
+
+    numbers = re.findall(r"\d+", version)
+
+    if not numbers:
+        return [0]
+
+    return [int(n) for n in numbers]
+
+
 def is_version_lower(local_version: str, remote_version: str) -> bool:
     try:
-        local_version = local_version.strip().replace("v", "")
-        remote_version = remote_version.strip().replace("v", "")
-
-        local_parts = [int(x) for x in local_version.split(".")]
-        remote_parts = [int(x) for x in remote_version.split(".")]
+        local_parts = _normalize_version(local_version)
+        remote_parts = _normalize_version(remote_version)
 
         length = max(len(local_parts), len(remote_parts))
         local_parts += [0] * (length - len(local_parts))
@@ -163,6 +183,7 @@ class MiniLauncherApp:
         self.load_settings()
 
     # ------------------ Interface ------------------
+        self.log("Loading interface...", "info")
         # Principal window #
 
         # Main
@@ -172,9 +193,6 @@ class MiniLauncherApp:
         root.iconbitmap(".\\Assets\\icon\\icon_32px.ico")
 
         # Menu bar
-        splash = SplashScreen()
-        self.log("Loading interface...", "info")
-
         self.toolbar = tk.Menu(root)
         menu = tk.Menu(self.toolbar, tearoff=0)
         menu.add_command(label="Show logs", command=self.toggle_logs_window)
@@ -207,7 +225,7 @@ class MiniLauncherApp:
         self.snapshot_check = tk.Checkbutton(root, text="Show snapshots", variable=self.show_snapshots_var, command=lambda: [self.refresh_version_list(), self.save_settings()])
         self.snapshot_check.pack(pady=2)
 
-        self.launch_btn = tk.Button(root, text="Launch game", command=lambda: [self.launch_game(), self.update_progress(0.0, 0.0, "Loading...")])
+        self.launch_btn = tk.Button(root, text="Launch game", command=lambda: [ self.save_settings(), self.update_progress(0, 1, "Starting..."), style.configure("blue.Horizontal.TProgressbar", background='green'), self.launch_game()])
         self.launch_btn.pack(pady=(20, 5))
 
         # Styled progress bar
@@ -395,7 +413,7 @@ class MiniLauncherApp:
                 self.update_btn.pack_forget()
             except Exception:
                 pass
-        self.log(f"Launcher up to date ({local})", "success")
+                self.log(f"Launcher up to date ({local})", "success")
 
 
     def check_version_mismatch_async(self):
@@ -582,10 +600,12 @@ class MiniLauncherApp:
         done = 0
         total = len(tasks)
         start_time = time.time()
+        style = ttk.Style()
         for kind, path, url in tasks:
             if self.cancel_download:
                 self.log("Download canceled!", "info")
-                self.update_progress(0, 1, "Download canceled")
+                self.update_progress(done, total, "Download canceled")
+                style.configure("blue.Horizontal.TProgressbar", background='orange')
                 return None, None
             path.parent.mkdir(parents=True, exist_ok=True)
             if path.exists():
@@ -647,7 +667,6 @@ class MiniLauncherApp:
         self.root.after(0, lambda: self.progress_label.config(text=f"Downloading Java..."))
         urllib.request.urlretrieve(download_url, zip_path)
 
-        import zipfile
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall(JAVA_DIR)
 
@@ -729,7 +748,8 @@ class MiniLauncherApp:
     def launch_game(self):
         if self.download_thread and self.download_thread.is_alive():
             self.cancel_download = True
-            self.log("Download cancellation requested.", "warn")
+            self.log("Canceling download...", "warn")
+            self.progress_label.config(text="Canceling download...")
             return
 
         self.cancel_download = False
@@ -805,9 +825,12 @@ class MiniLauncherApp:
             self.log(line.strip("\n"), "game")
         game_process.wait()
 
+        style = ttk.Style()
+
         self.root.after(0, lambda: self.launch_btn.config(text="Launch game"))
         self.root.after(0, lambda: self.set_ui_state(True))
         self.root.after(0, lambda: self.progress_label.config(text="Game closed"))
+        self.root.after(0, lambda: style.configure("blue.Horizontal.TProgressbar", background='red'))
         self.log("=== Game finished ===", "info")
 
 
@@ -827,7 +850,6 @@ def main():
             time.sleep(0.5)
 
             splash.root.destroy()
-
             root.deiconify()
 
             def on_close():
