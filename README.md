@@ -16,8 +16,8 @@ This is a Minecraft Java launcher that doesn't require an official (cracket) acc
 - ~~Installing Java internal to the launcher~~
 - Instance system
 - Language system
-- Update system
-- Icon
+- ~~Update system~~
+- ~~Icon~~
 - Modernize interface
 - More game launch options
 

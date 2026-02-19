@@ -8,4 +8,8 @@ python-3.14.2-win32/
 
 # Ignore application files/folders
 debug.bat
+settings.json
 __pycache__/
+
+# Ignore repo files/folders
+version.txt

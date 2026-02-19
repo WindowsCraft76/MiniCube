@@ -8,20 +8,25 @@ import time
 import webbrowser
 import zipfile
 import platform
+import winreg
 from pathlib import Path
 from tkinter import ttk, messagebox
 
 # ------------------ File paths ------------------
-BASE_DIR = Path(__file__).resolve().parent / "GameFile"
-VERSIONS_DIR = BASE_DIR / "versions"
-ASSETS_DIR = BASE_DIR / "assets"
-LIBRARIES_DIR = BASE_DIR / "libraries"
+BASE_DIR = Path(__file__).resolve().parent
+
+GAME_DIR = Path(__file__).resolve().parent / "GameFile"
+VERSIONS_DIR = GAME_DIR / "versions"
+ASSETS_DIR = GAME_DIR / "Assets"
+LIBRARIES_DIR = GAME_DIR / "libraries"
 INDEXES_DIR = ASSETS_DIR / "indexes"
 OBJECTS_DIR = ASSETS_DIR / "objects"
-JAVA_DIR = BASE_DIR / "java_versions"
+JAVA_DIR = GAME_DIR / "java_versions"
 
-for d in [BASE_DIR, VERSIONS_DIR, ASSETS_DIR, LIBRARIES_DIR, INDEXES_DIR, OBJECTS_DIR, JAVA_DIR]:
+for d in [GAME_DIR, VERSIONS_DIR, ASSETS_DIR, LIBRARIES_DIR, INDEXES_DIR, OBJECTS_DIR, JAVA_DIR]:
     d.mkdir(parents=True, exist_ok=True)
+
+SETTINGS_FILE = BASE_DIR / "settings.json"
 
 VERSION_MANIFEST = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json"
 PAGE_URL = "https://github.com/WindowsCraft76/mini-launcher-minecraft"
@@ -35,18 +40,30 @@ def center_window(window, width, height):
     y = (screen_height - height) // 2
     window.geometry(f"{width}x{height}+{x}+{y}")
 
-# ------------------ Read version.txt (local) ------------------
+# ------------------ Version launcher ------------------
 def get_info_version():
+    reg_path = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\Mini Launcher Minecraft"
+
     try:
-        version_file = Path(__file__).parent / "version.txt"
-        if version_file.exists():
-            with open(version_file, "r", encoding="utf-8") as f:
-                first_line = f.readline().strip()
-                return first_line if first_line else "Empty version.txt"
-        else:
-            return "No version info available"
+        try:
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, reg_path)
+        except FileNotFoundError:
+            key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, reg_path)
+
+        version, _ = winreg.QueryValueEx(key, "DisplayVersion")
+        winreg.CloseKey(key)
+
+        return str(version)
+
+    except FileNotFoundError:
+        try:
+            return "No version found"
+        except Exception as e:
+            return f"Error reading fallback version: {e}"
+
     except Exception as e:
-        return f"Error reading version.txt: {e}"
+        return f"Registry error: {e}"
+
 
 # ------------------ Read remote version ------------------
 def get_remote_version():
@@ -63,16 +80,71 @@ def get_remote_version():
     
 UPDATE_PAGE_URL = f"https://github.com/WindowsCraft76/mini-launcher-minecraft/releases/tag/{get_remote_version()}"
 
+def is_version_lower(local_version: str, remote_version: str) -> bool:
+    try:
+        local_version = local_version.strip().replace("v", "")
+        remote_version = remote_version.strip().replace("v", "")
+
+        local_parts = [int(x) for x in local_version.split(".")]
+        remote_parts = [int(x) for x in remote_version.split(".")]
+
+        length = max(len(local_parts), len(remote_parts))
+        local_parts += [0] * (length - len(local_parts))
+        remote_parts += [0] * (length - len(remote_parts))
+
+        return local_parts < remote_parts
+
+    except Exception:
+        return False
+
+# ------------------ SplashScreen ------------------
+class SplashScreen:
+    def __init__(self):
+        self.root = tk.Toplevel()
+        self.root.overrideredirect(True)
+        self.root.configure(bg="#2b2b2b")
+
+        logo = tk.PhotoImage(file=".\\Assets\\icon\\icon_64px.png")
+        logo_label = tk.Label(self.root, image=logo, bg="#2b2b2b")
+        logo_label.image = logo
+        logo_label.pack(side="left", padx=10, pady=10)
+
+        self.center_window(350, 100)
+
+        frame = tk.Frame(self.root, bg="#2b2b2b")
+        frame.pack(expand=True, fill="both")
+
+        self.label_title = tk.Label(
+            frame,
+            text="Mini Launcher Minecraft",
+            font=("Segoe UI", 14, "bold"),
+            fg="white",
+            bg="#2b2b2b"
+        )
+        self.label_title.pack(side="top", pady=(25, 2))
+
+        self.label_text = tk.Label(
+            frame,
+            text="Loading...",
+            font=("Segoe UI", 10),
+            fg="lightgray",
+            bg="#2b2b2b"
+        )
+        self.label_text.pack(side="top", pady=(0, 25))
+
+    def center_window(self, width, height):
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        x = (screen_width - width) // 2
+        y = (screen_height - height) // 2
+        self.root.geometry(f"{width}x{height}+{x}+{y}")
+
 # ------------------ Main Launcher ------------------
 class MiniLauncherApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Mini Launcher Minecraft")
-        self.root.geometry("400x320")
-        self.root.resizable(False, False)
-        root.iconbitmap("./assets/icon/icon_32px.ico")
 
-        # Variables
+        # Variables Default values
         self.username_var = tk.StringVar(value="Steve")
         self.version_var = tk.StringVar()
         self.ram_var = tk.IntVar(value=2048)
@@ -87,7 +159,22 @@ class MiniLauncherApp:
         self.log_text_win = None
         self.log_buffer = []
 
+        # Load saved settings
+        self.load_settings()
+
+    # ------------------ Interface ------------------
+        # Principal window #
+
+        # Main
+        self.root.title("Mini Launcher Minecraft")
+        self.root.geometry("350x270")
+        self.root.resizable(False, False)
+        root.iconbitmap(".\\Assets\\icon\\icon_32px.ico")
+
         # Menu bar
+        splash = SplashScreen()
+        self.log("Loading interface...", "info")
+
         self.toolbar = tk.Menu(root)
         menu = tk.Menu(self.toolbar, tearoff=0)
         menu.add_command(label="Show logs", command=self.toggle_logs_window)
@@ -113,19 +200,14 @@ class MiniLauncherApp:
         self.username_entry = tk.Entry(root, textvariable=self.username_var)
         self.username_entry.pack(pady=2)
 
-        tk.Label(root, text="RAM Memory (MB):").pack(pady=2)
-        self.ram_spin = tk.Spinbox(root, from_=512, to=16384, increment=512,
-                                   textvariable=self.ram_var)
-        self.ram_spin.pack(pady=2)
-
         tk.Label(root, text="Version:").pack(pady=2)
         self.version_menu = ttk.Combobox(root, textvariable=self.version_var, state="readonly")
         self.version_menu.pack(pady=2)
 
-        self.snapshot_check = tk.Checkbutton(root, text="Show snapshots", variable=self.show_snapshots_var, command=self.refresh_version_list)
+        self.snapshot_check = tk.Checkbutton(root, text="Show snapshots", variable=self.show_snapshots_var, command=lambda: [self.refresh_version_list(), self.save_settings()])
         self.snapshot_check.pack(pady=2)
 
-        self.launch_btn = tk.Button(root, text="Launch game", command=self.launch_game)
+        self.launch_btn = tk.Button(root, text="Launch game", command=lambda: [self.launch_game(), self.update_progress(0.0, 0.0, "Loading...")])
         self.launch_btn.pack(pady=(20, 5))
 
         # Styled progress bar
@@ -133,7 +215,7 @@ class MiniLauncherApp:
         style.theme_use('classic')
         style.configure("blue.Horizontal.TProgressbar", troughcolor='grey', background='green', thickness=20)
         self.progress_var = tk.DoubleVar(value=0.0)
-        self.progress = ttk.Progressbar(root, style="blue.Horizontal.TProgressbar", variable=self.progress_var, maximum=1.0, length=350)
+        self.progress = ttk.Progressbar(root, style="blue.Horizontal.TProgressbar", variable=self.progress_var, maximum=1.0, length=320)
         self.progress.pack(pady=5)
         self.progress_label = tk.Label(root, text="Waiting...")
         self.progress_label.pack(pady=(5, 10))
@@ -142,18 +224,160 @@ class MiniLauncherApp:
         self.check_version_mismatch_async()
         self.refresh_version_list()
 
-    # ------------------ Get required Java version ------------------
-    def get_required_java_version(self, version_data):
 
-        java_info = version_data.get("javaVersion")
-        if not java_info:
-            return 8
-        return java_info.get("majorVersion", 8)
+    # Settings window #
+    def toggle_settings_window(self):
+        if getattr(self, "settings_window", None) and self.settings_window.winfo_exists():
+            try:
+                self.settings_window.deiconify()
+                self.settings_window.lift()
+                self.settings_window.focus_force()
+            except Exception:
+                pass
+            return
+
+        # Main
+        self.settings_window = tk.Toplevel(self.root)
+        self.settings_window.title("Settings - Mini Launcher Minecraft")
+        self.settings_window.resizable(False, False)
+        self.settings_window.iconbitmap(".\\Assets\\icon\\icon_32px.ico")
+        center_window(self.settings_window, 360, 150)
+
+        # UI
+        tk.Label(self.settings_window, text="RAM Memory (MB):").pack(pady=2)
+        self.ram_spin = tk.Spinbox(self.settings_window, from_=512, to=16384, increment=512, textvariable=self.ram_var, command=self.save_settings)
+        self.ram_spin.pack(pady=5)
+
+        self.old_check = tk.Checkbutton(self.settings_window, text="Show historical versions", variable=self.show_old_var, command=lambda: [self.refresh_version_list(), self.save_settings()])
+        self.old_check.pack(pady=5)
+
+        self.reset_btn = tk.Button(self.settings_window, text="Reset settings", command=self.reset_settings)
+        self.reset_btn.pack(pady=(20, 5))
+
+        def _on_close():
+            try:
+                self.settings_window.destroy()
+            except Exception:
+                pass
+            self.settings_window = None
+            if getattr(self, "old_check", None):
+                try:
+                    self.old_check.destroy()
+                except Exception:
+                    pass
+                self.old_check = None
+        
+        self.settings_window.protocol("WM_DELETE_WINDOW", _on_close)
+
+    # Logs window #
+    def log(self, msg, kind="info"):
+        timestamped = f"[{time.strftime('%H:%M:%S')}] {msg}"
+        self.log_buffer.append((timestamped, kind))
+        self.root.after(0, lambda: self._append_log_to_window(timestamped + "\n", kind))
+
+    def _append_log_to_window(self, msg, kind="info"):
+        if self.log_text_win:
+            try:
+                self.log_text_win.insert(tk.END, msg + "", kind)
+                self.log_text_win.see(tk.END)
+            except Exception:
+                pass
+
+    def toggle_logs_window(self):
+        if self.log_window and self.log_window.winfo_exists():
+            self.log_window.deiconify()
+            self.log_window.lift()
+            self.log_window.focus_force()
+        else:
+            self.log_window = tk.Toplevel(self.root)
+            self.log_window.title("Logs - Mini Launcher Minecraft")
+            self.log_window.iconbitmap(".\\Assets\\icon\\icon_32px.ico")
+            self.log_window.geometry("600x300")
+            self.log_window.protocol("WM_DELETE_WINDOW", self._on_close_log_window)
+
+            self.log_text_win = tk.Text(self.log_window, height=25, width=120, bg="black", fg="white")
+            self.log_text_win.pack(fill=tk.BOTH, expand=True)
+
+            self.log_text_win.tag_config("info", foreground="white")
+            self.log_text_win.tag_config("success", foreground="green")
+            self.log_text_win.tag_config("warn", foreground="orange")
+            self.log_text_win.tag_config("error", foreground="red")
+            self.log_text_win.tag_config("game", foreground="cyan")
+
+            for line, kind in self.log_buffer:
+                try:
+                    self.log_text_win.insert(tk.END, line + "\n", kind)
+                except Exception:
+                    self.log_text_win.insert(tk.END, line + "\n")
+            self.log_text_win.see(tk.END)
+
+    def _on_close_log_window(self):
+        if self.log_window:
+            try:
+                self.log_window.destroy()
+            except Exception:
+                pass
+        self.log_window = None
+        self.log_text_win = None
+
+    # ------------------ Settings Save/Load ------------------
+    def load_settings(self):
+
+        self.log("Loading settings...", "info")
+
+        if not SETTINGS_FILE.exists():
+            return
+
+        try:
+            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            # Default values if keys are missing
+            self.username_var.set(data.get("username", "Steve"))
+            self.ram_var.set(data.get("ram", 2048))
+            self.show_snapshots_var.set(data.get("show_snapshots", False))
+            self.show_old_var.set(data.get("show_old_versions", False))
+
+            self.log("Settings loaded!", "success")
+        except Exception as e:
+            self.log(f"Error loading settings!", "error")
+
+    def save_settings(self):
+        data = {
+            "username": self.username_var.get(),
+            "ram": self.ram_var.get(),
+            "show_snapshots": self.show_snapshots_var.get(),
+            "show_old_versions": self.show_old_var.get()
+        }
+
+        try:
+            with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=4)
+        except Exception as e:
+            self.log(f"Error saving settings: {e}", "error")
+
+    def reset_settings(self):
+    # Set default values
+        self.username_var.set("Steve")
+        self.ram_var.set(2048)
+        self.show_snapshots_var.set(False)
+        self.show_old_var.set(False)
+
+        if SETTINGS_FILE.exists():
+            SETTINGS_FILE.unlink()
+
+        self.log("Settings reset to defaults!", "info")
+
+        self.load_settings()
 
     # ------------------ Version mismatch check ------------------
     def check_version_mismatch(self):
+
+        self.log("Checking for updates...", "info")
+
         local = get_info_version()
         remote = get_remote_version()
+
         if remote.startswith("Error"):
             self._remove_update_toolbar_entry()
             try:
@@ -162,14 +386,17 @@ class MiniLauncherApp:
                 pass
             return
 
-        if str(local).strip() != str(remote).strip():
+        if is_version_lower(local, remote):
             self._add_update_toolbar_entry()
+            self.log(f"Update available: {local} -> {remote}", "warn")
         else:
             self._remove_update_toolbar_entry()
             try:
                 self.update_btn.pack_forget()
             except Exception:
                 pass
+        self.log(f"Launcher up to date ({local})", "success")
+
 
     def check_version_mismatch_async(self):
         threading.Thread(target=self._check_version_thread, daemon=True).start()
@@ -179,7 +406,7 @@ class MiniLauncherApp:
             self.check_version_mismatch()
         except Exception as e:
             try:
-                self.log(f"Erreur check_version_mismatch: {e}", "error")
+                self.log(f"Erreur checking for updates!", "error")
             except Exception:
                 pass
 
@@ -214,117 +441,19 @@ class MiniLauncherApp:
             except Exception:
                 pass
 
-    # ------------------ Open folder ------------------
-    def open_folder(self):
-        folder_path = BASE_DIR
-        if os.name == "nt":
-            os.startfile(folder_path)
-
-    # ------------------ UI lock/unlock ------------------
-    def set_ui_state(self, enabled: bool):
-        state = "normal" if enabled else "disabled"
-        self.username_entry.config(state=state)
-        self.ram_spin.config(state=state)
-        self.version_menu.config(state=state)
-        self.snapshot_check.config(state=state)
-        if getattr(self, "old_check", None):
-            self.old_check.config(state=state)
-        self.launch_btn.config(state=state)
-
-    # ------------------ Setting ------------------
-    def toggle_settings_window(self):
-        if getattr(self, "settings_window", None) and self.settings_window.winfo_exists():
-            try:
-                self.settings_window.deiconify()
-                self.settings_window.lift()
-                self.settings_window.focus_force()
-            except Exception:
-                pass
-            return
-
-        self.settings_window = tk.Toplevel(self.root)
-        self.settings_window.title("Settings - Mini Launcher Minecraft")
-        self.settings_window.resizable(False, False)
-        self.settings_window.iconbitmap("./assets/icon/icon_32px.ico")
-        center_window(self.settings_window, 360, 220)
-
-        self.old_check = tk.Checkbutton(self.settings_window, text="Show historical versions", variable=self.show_old_var, command=self.refresh_version_list)
-        self.old_check.pack(pady=1)
-
-        def _on_close():
-            try:
-                self.settings_window.destroy()
-            except Exception:
-                pass
-            self.settings_window = None
-            if getattr(self, "old_check", None):
-                try:
-                    self.old_check.destroy()
-                except Exception:
-                    pass
-                self.old_check = None
-
-        self.settings_window.protocol("WM_DELETE_WINDOW", _on_close)
-
-    # ------------------ Logs ------------------
-    def log(self, msg, kind="info"):
-        timestamped = f"[{time.strftime('%H:%M:%S')}] {msg}"
-        self.log_buffer.append((timestamped, kind))
-        self.root.after(0, lambda: self._append_log_to_window(timestamped + "\n", kind))
-
-    def _append_log_to_window(self, msg, kind="info"):
-        if self.log_text_win:
-            try:
-                self.log_text_win.insert(tk.END, msg + "", kind)
-                self.log_text_win.see(tk.END)
-            except Exception:
-                pass
-
-    def toggle_logs_window(self):
-        if self.log_window and self.log_window.winfo_exists():
-            self.log_window.deiconify()
-            self.log_window.lift()
-            self.log_window.focus_force()
-        else:
-            self.log_window = tk.Toplevel(self.root)
-            self.log_window.title("Logs - Mini Launcher Minecraft")
-            self.log_window.iconbitmap("./assets/icon/icon_32px.ico")
-            self.log_window.geometry("600x300")
-            self.log_window.protocol("WM_DELETE_WINDOW", self._on_close_log_window)
-
-            self.log_text_win = tk.Text(self.log_window, height=25, width=120, bg="black", fg="white")
-            self.log_text_win.pack(fill=tk.BOTH, expand=True)
-
-            self.log_text_win.tag_config("info", foreground="white")
-            self.log_text_win.tag_config("success", foreground="green")
-            self.log_text_win.tag_config("warn", foreground="orange")
-            self.log_text_win.tag_config("error", foreground="red")
-            self.log_text_win.tag_config("game", foreground="cyan")
-
-            for line, kind in self.log_buffer:
-                try:
-                    self.log_text_win.insert(tk.END, line + "\n", kind)
-                except Exception:
-                    self.log_text_win.insert(tk.END, line + "\n")
-            self.log_text_win.see(tk.END)
-
-    def _on_close_log_window(self):
-        if self.log_window:
-            try:
-                self.log_window.destroy()
-            except Exception:
-                pass
-        self.log_window = None
-        self.log_text_win = None
-
-    # ------------------ Versions ------------------
+    # ------------------ Versions Minecraft ------------------
     def refresh_version_list(self):
+
+        self.log("Fetching version manifest...", "info")
+
         try:
             urllib.request.urlretrieve(VERSION_MANIFEST, VERSIONS_DIR / "version_manifest.json")
             with open(VERSIONS_DIR / "version_manifest.json", "r", encoding="utf-8") as f:
                 self.version_manifest = json.load(f)
+                self.log("Version manifest fetched successfully!", "success")
         except Exception as e:
-            messagebox.showerror("Error", f"Unable to fetch manifest: {e}")
+            messagebox.showerror("Error", f"Unable to fetch manifest!")
+            self.log(f"Error fetching version manifest!", "error")
             return
 
         items = []
@@ -344,7 +473,33 @@ class MiniLauncherApp:
         if version_ids:
             self.version_var.set(version_ids[0])
 
-        self.check_version_mismatch_async()
+    # ------------------ Open folder ------------------
+    def open_folder(self):
+        folder_path = GAME_DIR
+        if os.name == "nt":
+            os.startfile(folder_path)
+
+    # ------------------ Get required Java version ------------------
+    def get_required_java_version(self, version_data):
+
+        java_info = version_data.get("javaVersion")
+        if not java_info:
+            return 8
+        return java_info.get("majorVersion", 8)
+
+    # ------------------ UI lock/unlock ------------------
+    def set_ui_state(self, enabled: bool):
+        state = "normal" if enabled else "disabled"
+        self.username_entry.config(state=state)
+        self.version_menu.config(state=state)
+        self.snapshot_check.config(state=state)
+        self.launch_btn.config(state=state)
+
+        if hasattr(self, "ram_spin") and self.ram_spin:
+            self.ram_spin.config(state=state)
+
+        if hasattr(self, "old_check") and self.old_check:
+            self.old_check.config(state=state)
 
     # ------------------ Progress ------------------
     def update_progress(self, done, total, text=""):
@@ -519,7 +674,7 @@ class MiniLauncherApp:
 
         version_id = version_data["id"]
 
-        natives_dir = BASE_DIR / "natives" / version_id
+        natives_dir = GAME_DIR / "natives" / version_id
         natives_dir.mkdir(parents=True, exist_ok=True)
 
         system = platform.system().lower()
@@ -628,7 +783,7 @@ class MiniLauncherApp:
             main_class,
             "--username", username,
             "--version", version_id,
-            "--gameDir", str(BASE_DIR),
+            "--gameDir", str(GAME_DIR),
             "--assetsDir", str(ASSETS_DIR),
             "--assetIndex", version_data["assetIndex"]["id"],
             "--uuid", "00000000-0000-0000-0000-000000000000",
@@ -659,9 +814,33 @@ class MiniLauncherApp:
 # ------------------ Main ------------------
 def main():
     root = tk.Tk()
+    root.withdraw()
 
-    app = MiniLauncherApp(root)
+    splash = SplashScreen()
 
+    def start_launcher():
+        try:
+            root.update()
+            app = MiniLauncherApp(root)
+
+            root.update()
+            time.sleep(0.5)
+
+            splash.root.destroy()
+
+            root.deiconify()
+
+            def on_close():
+                app.save_settings()
+                root.destroy()
+
+            root.protocol("WM_DELETE_WINDOW", on_close)
+
+        except Exception as e:
+            messagebox.showerror("Startup Error", str(e))
+            root.destroy()
+
+    root.after(100, start_launcher)
     root.mainloop()
 
 if __name__ == "__main__":
