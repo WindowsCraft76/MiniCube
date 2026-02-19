@@ -225,7 +225,7 @@ class MiniLauncherApp:
         self.snapshot_check = tk.Checkbutton(root, text="Show snapshots", variable=self.show_snapshots_var, command=lambda: [self.refresh_version_list(), self.save_settings()])
         self.snapshot_check.pack(pady=2)
 
-        self.launch_btn = tk.Button(root, text="Launch game", command=lambda: [ self.save_settings(), self.update_progress(0, 1, "Starting..."), style.configure("blue.Horizontal.TProgressbar", background='green'), self.launch_game()])
+        self.launch_btn = tk.Button(root, text="Launch game", command=lambda: [ self.save_settings(), self.update_progress(0, 1, "Loading..."), style.configure("blue.Horizontal.TProgressbar", background='green'), self.launch_game()])
         self.launch_btn.pack(pady=(20, 5))
 
         # Styled progress bar
