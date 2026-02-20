@@ -28,6 +28,7 @@ for d in [GAME_DIR, VERSIONS_DIR, ASSETS_DIR, LIBRARIES_DIR, INDEXES_DIR, OBJECT
     d.mkdir(parents=True, exist_ok=True)
 
 SETTINGS_FILE = BASE_DIR / "settings.json"
+CONTENT = BASE_DIR / "Content"
 
 VERSION_MANIFEST = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json"
 PAGE_URL = "https://github.com/WindowsCraft76/mini-launcher-minecraft"
@@ -124,7 +125,7 @@ class SplashScreen:
         self.root.overrideredirect(True)
         self.root.configure(bg="#2b2b2b")
 
-        logo = tk.PhotoImage(file=".\\Assets\\icon\\icon_64px.png")
+        logo = tk.PhotoImage(file=f"{CONTENT}\\icon\\icon_64px.png")
         logo_label = tk.Label(self.root, image=logo, bg="#2b2b2b")
         logo_label.image = logo
         logo_label.pack(side="left", padx=10, pady=10)
@@ -190,7 +191,7 @@ class MiniLauncherApp:
         self.root.title("Mini Launcher Minecraft")
         self.root.geometry("350x270")
         self.root.resizable(False, False)
-        root.iconbitmap(".\\Assets\\icon\\icon_32px.ico")
+        root.iconbitmap(f"{CONTENT}\\icon\\icon_32px.ico")
 
         # Menu bar
         self.toolbar = tk.Menu(root)
@@ -258,7 +259,7 @@ class MiniLauncherApp:
         self.settings_window = tk.Toplevel(self.root)
         self.settings_window.title("Settings - Mini Launcher Minecraft")
         self.settings_window.resizable(False, False)
-        self.settings_window.iconbitmap(".\\Assets\\icon\\icon_32px.ico")
+        self.settings_window.iconbitmap(f"{CONTENT}\\icon\\icon_32px.ico")
         center_window(self.settings_window, 360, 150)
 
         # UI
@@ -309,7 +310,7 @@ class MiniLauncherApp:
         else:
             self.log_window = tk.Toplevel(self.root)
             self.log_window.title("Logs - Mini Launcher Minecraft")
-            self.log_window.iconbitmap(".\\Assets\\icon\\icon_32px.ico")
+            self.log_window.iconbitmap(f"{CONTENT}\\icon\\icon_32px.ico")
             self.log_window.geometry("600x300")
             self.log_window.protocol("WM_DELETE_WINDOW", self._on_close_log_window)
 
