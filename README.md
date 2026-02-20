@@ -1,4 +1,4 @@
-# ![icon](https://github.com/WindowsCraft76/mini-launcher-minecraft/blob/main/assets/icon/icon_32px.png?raw=true) Mini Launcher Minecraft - [Download Page](https://github.com/WindowsCraft76/mini-launcher-minecraft/releases)
+# ![icon](https://github.com/WindowsCraft76/mini-launcher-minecraft/blob/main/Content/icon/icon_32px.png?raw=true) Mini Launcher Minecraft - [Download Page](https://github.com/WindowsCraft76/mini-launcher-minecraft/releases)
 *A launcher Minecraft with a simple and easy-to-use interface!*
 
 ### Project Overview: 
