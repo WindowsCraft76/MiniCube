@@ -12,4 +12,4 @@ A launcher to be able to launch the Minecraft game on any version, lightweight a
 - Sur le système d'exploitation Windows uniquement (for now)
 
 > [!IMPORTANT]
-> You can find the [General Terms of Use](https://github.com/WindowsCraft76/mini-cubeblob/main/TERMS_OF_USE.md) and the [Privacy Policy](https://github.com/WindowsCraft76/mini-cube/blob/main/PRIVACY.md).
+> You can find the [General Terms of Use](https://github.com/WindowsCraft76/mini-cube/blob/main/TERMS_OF_USE.md) and the [Privacy Policy](https://github.com/WindowsCraft76/mini-cube/blob/main/PRIVACY.md).
