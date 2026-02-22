@@ -42,16 +42,19 @@ def get_remote_version():
         if not lines:
             return "No tags found"
 
-        last_tag_line = lines[0]
-        tag_ref = last_tag_line.split("\t")[1]
+        for line in lines:
+            tag_ref = line.split("\t")[1]
+            tag_name = tag_ref.replace("refs/tags/", "").replace("^{}", "")
 
-        tag_name = tag_ref.replace("refs/tags/", "").replace("^{}", "")
-        return tag_name
+            if tag_name.lower().endswith("-dev"):
+                continue
+
+            return tag_name
+
+        return "No stable tags found"
 
     except Exception as e:
         return f"Error fetching remote version: {e}"
-    
-UPDATE_PAGE_URL = f"https://github.com/WindowsCraft76/mini-cube/releases/tag/{get_remote_version()}"
 
 def _normalize_version(version: str):
     version = version.strip().lower().lstrip("v")
@@ -81,4 +84,8 @@ def is_version_lower(local_version: str, remote_version: str) -> bool:
 def get_update_page_url(remote_version=None):
     if remote_version is None:
         remote_version = get_remote_version()
+
+    if remote_version.endswith("-dev"):
+        return PAGE_URL
+
     return f"{PAGE_URL}/releases/tag/{remote_version}"
