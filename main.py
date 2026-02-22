@@ -15,13 +15,11 @@ def main():
 
     def start_launcher():
         try:
-            root.update()
             app = MiniCubeApp(root)
 
             root.update()
-            time.sleep(0.5)
+            root.after(500, splash.root.destroy)
 
-            splash.root.destroy()
             root.deiconify()
 
             def on_close():

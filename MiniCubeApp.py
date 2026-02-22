@@ -52,7 +52,7 @@ class MiniCubeApp:
         self.root.title("Mini Cube")
         self.root.geometry("350x310")
         self.root.resizable(False, False)
-        root.iconbitmap(f"{CONTENT}\\icon\\icon_32px.ico")
+        self.root.iconbitmap(f"{CONTENT}\\icon\\icon_32px.ico")
 
         # Menu bar
         self.toolbar = tk.Menu(root)
@@ -74,7 +74,7 @@ class MiniCubeApp:
         help.add_command(label="Open page", command=lambda: webbrowser.open(PAGE_URL))
         self.toolbar.add_cascade(label="Help", menu=help)
 
-        root.config(menu=self.toolbar)
+        self.root.config(menu=self.toolbar)
 
         self.UPDATE_LABEL = "New update available"
 
@@ -253,15 +253,14 @@ class MiniCubeApp:
 
         self.refresh_account_listbox()
 
+        self.acc_win.protocol("WM_DELETE_WINDOW", self._on_close)
+
     def _on_close(self):
         try:
             self.acc_win.destroy()
         except Exception:
             pass
         self.acc_win = None
-
-        self.acc_win.protocol("WM_DELETE_WINDOW", self._on_close)
-
 
     # ------------------ Accounts management ------------------
     def add_microsoft_account(self):
@@ -513,7 +512,7 @@ class MiniCubeApp:
     # ------------------ UI lock/unlock ------------------
     def set_ui_state(self, enabled: bool):
         state = "normal" if enabled else "disabled"
-        self.username_entry.config(state=state)
+        self.offline_entry.config(state=state)
         self.version_menu.config(state=state)
         self.snapshot_check.config(state=state)
         self.launch_btn.config(state=state)
@@ -690,8 +689,8 @@ class MiniCubeApp:
                 self.log(f"Java {major_version} installed successfully!", "success")
                 return javaw
 
-        raise Exception(f"javaw.exe for Java {major_version} not found", "error")
-        self.log(f"javaw.exe for Java {major_version} not found", "error")
+        raise Exception(f"No Java package found for Java {major_version}")
+        raise Exception(f"javaw.exe for Java {major_version} not found")
 
     # ------------------ Extract natives ------------------
     def extract_natives(self, version_data):
@@ -767,6 +766,18 @@ class MiniCubeApp:
         version_id = self.version_var.get()
         ram = self.ram_var.get()
 
+        if not self.is_offline_var.get():
+            account_name = self.selected_account_var.get()
+            account_data = self.account_manager.get_account_by_name(account_name)
+
+            if not account_data:
+                self.root.after(0, lambda: messagebox.showerror(
+                    "Error",
+                    "Please select an account or enable offline mode."
+                ))
+                self.root.after(0, lambda: self.launch_btn.config(text="Launch game"))
+                return
+
         try:
             version_data, version_jar_path = self.prepare_version(version_id)
             if version_data is None:
@@ -787,7 +798,6 @@ class MiniCubeApp:
                 jar_path = LIBRARIES_DIR / path
                 if jar_path.exists():
                     classpath.append(str(jar_path))
-        classpath.append(str(version_jar_path))
 
         version_jar = VERSIONS_DIR / version_id / f"{version_id}.jar"
         classpath.append(str(version_jar))
