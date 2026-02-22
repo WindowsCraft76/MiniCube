@@ -70,6 +70,7 @@ class MiniCubeApp:
             label="About",
             command=lambda: messagebox.showinfo("About", f"Mini Cube\n\nCreate by WindowsCraft76\nVersion: {get_info_version()}"))
         help.add_command(label="Terms of use", command=lambda: webbrowser.open(f"{PAGE_URL}/blob/main/TERMS_OF_USE.md"))
+        help.add_command(label="Privacy statement", command=lambda: webbrowser.open(f"{PAGE_URL}/blob/main/PRIVACY.md"))
         help.add_command(label="Open page", command=lambda: webbrowser.open(PAGE_URL))
         self.toolbar.add_cascade(label="Help", menu=help)
 
