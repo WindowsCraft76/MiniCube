@@ -79,19 +79,18 @@ class MiniCubeApp:
         self.UPDATE_LABEL = "New update available"
 
         # UI
-        self.account_label = tk.Label(root, text="Account:")
-        self.account_label.pack(pady=(5, 2))
-
         self.account_frame = tk.Frame(root)
-        self.account_frame.pack(pady=(0, 0))
+        self.account_frame.pack(pady=(5, 0))
 
-        self.account_menu = ttk.Combobox(self.account_frame, textvariable=self.selected_account_var, state="readonly")
-        self.account_menu.pack(pady=(0, 0))
+        self.account_label = tk.Label(self.account_frame, text="Account:")
+        self.account_menu = ttk.Combobox(
+            self.account_frame,
+            textvariable=self.selected_account_var,
+            state="readonly"
+        )
 
-        self.offline_label = tk.Label(root, text="Username:")
-        self.offline_label.pack(pady=(5, 2))
+        self.offline_label = tk.Label(self.account_frame, text="Username:")
         self.offline_entry = tk.Entry(self.account_frame, textvariable=self.username_var)
-        self.offline_entry.pack(pady=(0, 0))
 
         self.offline_check = tk.Checkbutton(
             root, 
@@ -102,10 +101,11 @@ class MiniCubeApp:
         self.offline_check.pack(pady=(3, 15))
 
         self.refresh_accounts_ui()
+        self.toggle_account_mode()
 
         tk.Label(root, text="Version:").pack(pady=(0, 2))
         self.version_menu = ttk.Combobox(root, textvariable=self.version_var, state="readonly")
-        self.version_menu.pack(pady=(2, 0))
+        self.version_menu.pack(pady=(0, 0))
 
         self.snapshot_check = tk.Checkbutton(root, text="Show snapshots", variable=self.show_snapshots_var, command=lambda: [self.refresh_version_list(), self.save_settings()])
         self.snapshot_check.pack(pady=(3, 0))
@@ -317,7 +317,6 @@ class MiniCubeApp:
         self.account_manager.remove_account(username)
         self.refresh_account_listbox()
         self.refresh_accounts_ui()
-        self.log(f"Account '{username}' deleted", "info")
 
     # ------------------ Settings Save/Load ------------------
     def load_settings(self):
@@ -373,23 +372,26 @@ class MiniCubeApp:
     def toggle_account_mode(self):
         has_official = len(self.account_manager.get_all_accounts()) > 0
 
+        for widget in self.account_frame.winfo_children():
+            widget.pack_forget()
+
         if self.is_offline_var.get():
             if not has_official:
-                messagebox.showwarning("Warning", "Connect at least one Microsoft account to unlock Offline mode.")
+                messagebox.showwarning(
+                    "Warning",
+                    "Connect at least one Microsoft account to unlock Offline mode."
+                )
                 self.is_offline_var.set(False)
+                self.toggle_account_mode()
                 return
 
-            self.account_menu.pack_forget()
-            self.account_label.pack_forget()
-
-            self.offline_label.pack()
-            self.offline_entry.pack()
+            self.offline_label.pack(pady=(0, 2))
+            self.offline_entry.pack(pady=(0, 0))
+            self.log("Mode change: Offline", "info")
         else:
-            self.offline_entry.pack_forget()
-            self.offline_label.pack_forget()
-
-            self.account_label.pack()
-            self.account_menu.pack()
+            self.account_label.pack(pady=(0, 2))
+            self.account_menu.pack(pady=(0, 0))
+            self.log("Mode change: Online", "info")
 
     # ------------------ Version mismatch check ------------------
     def check_version_mismatch(self):
@@ -511,17 +513,21 @@ class MiniCubeApp:
 
     # ------------------ UI lock/unlock ------------------
     def set_ui_state(self, enabled: bool):
-        state = "normal" if enabled else "disabled"
-        self.offline_entry.config(state=state)
-        self.version_menu.config(state=state)
-        self.snapshot_check.config(state=state)
-        self.launch_btn.config(state=state)
+        normal_state = "normal" if enabled else "disabled"
+        combo_state = "readonly" if enabled else "disabled"
+
+        self.account_menu.config(state=combo_state)
+        self.version_menu.config(state=combo_state)
+
+        self.offline_entry.config(state=normal_state)
+        self.snapshot_check.config(state=normal_state)
+        self.launch_btn.config(state=normal_state)
 
         if hasattr(self, "ram_spin") and self.ram_spin:
-            self.ram_spin.config(state=state)
+            self.ram_spin.config(state=normal_state)
 
         if hasattr(self, "old_check") and self.old_check:
-            self.old_check.config(state=state)
+            self.old_check.config(state=normal_state)
 
     # ------------------ Progress ------------------
     def update_progress(self, done, total, text=""):

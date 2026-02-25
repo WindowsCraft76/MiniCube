@@ -4,6 +4,7 @@ import socketserver
 import threading
 import urllib.parse
 import time
+import requests
 from tkinter import messagebox
 from Config import CLIENT_ID, REDIRECT_URI, SCOPE
 
@@ -57,7 +58,7 @@ class MicrosoftAuth:
             self.app.log("Waiting for Microsoft login in browser...", "info")
 
         start = time.time()
-        while self.auth_code is None and not self.auth_failed and time.time() - start < 60:
+        while self.auth_code is None and not self.auth_failed and time.time() - start < 120:
             time.sleep(0.5)
 
         if self.auth_failed or not self.auth_code:
@@ -86,7 +87,7 @@ class MicrosoftAuth:
             self.auth_failed = True
             if self.app:
                 self.app.log(f"Authentication failed!: {e}", "error")
-                messagebox.showerror("Authentication Failed", f"Microsoft authentication failed: {e}")
+                messagebox.showerror("Authentication Failed", str(e))
             return None
 
     def _start_local_server(self):
@@ -110,16 +111,15 @@ class MicrosoftAuth:
 
                     if auth.app:
                         auth.app.log(f"Authentication failed: {error_msg}", "error")
-                        messagebox.showerror("Authentication Failed", f"Microsoft authentication failed: {error_msg}")
 
                 elif "code" in query:
                     auth.auth_code = query["code"][0]
                     self.wfile.write(auth.HTML_SUCCESS.encode("utf-8"))
 
                 else:
-                    self.wfile.write(auth.HTML_ERROR.format(
-                        error="Invalid request."
-                    ).encode("utf-8"))
+                    auth.auth_failed = True
+                    html = auth.HTML_ERROR.format(error="Invalid request.")
+                    self.wfile.write(html.encode("utf-8"))
 
             def log_message(self, format, *args):
                 pass
@@ -130,3 +130,80 @@ class MicrosoftAuth:
                 httpd.handle_request()
 
         threading.Thread(target=run_server, daemon=True).start()
+
+    # ---------------- MICROSOFT TOKEN ----------------
+    def _get_microsoft_token(self, code):
+        url = "https://login.live.com/oauth20_token.srf"
+        data = {
+            "client_id": CLIENT_ID,
+            "code": code,
+            "grant_type": "authorization_code",
+            "redirect_uri": REDIRECT_URI,
+            "scope": SCOPE
+        }
+
+        r = requests.post(url, data=data)
+        r.raise_for_status()
+        js = r.json()
+
+        return js["access_token"], js.get("refresh_token", "")
+
+    # ---------------- XBOX LIVE ----------------
+    def _get_xbox_live_token(self, ms_access):
+        url = "https://user.auth.xboxlive.com/user/authenticate"
+        payload = {
+            "Properties": {
+                "AuthMethod": "RPS",
+                "SiteName": "user.auth.xboxlive.com",
+                "RpsTicket": f"d={ms_access}"
+            },
+            "RelyingParty": "http://auth.xboxlive.com",
+            "TokenType": "JWT"
+        }
+
+        r = requests.post(url, json=payload)
+        r.raise_for_status()
+        return r.json()["Token"]
+
+    # ---------------- XSTS ----------------
+    def _get_xsts_token(self, xbl_token):
+        url = "https://xsts.auth.xboxlive.com/xsts/authorize"
+        payload = {
+            "Properties": {
+                "SandboxId": "RETAIL",
+                "UserTokens": [xbl_token]
+            },
+            "RelyingParty": "rp://api.minecraftservices.com/",
+            "TokenType": "JWT"
+        }
+
+        r = requests.post(url, json=payload)
+        r.raise_for_status()
+        js = r.json()
+
+        uhs = js["DisplayClaims"]["xui"][0]["uhs"]
+        return js["Token"], uhs
+
+    # ---------------- MINECRAFT TOKEN ----------------
+    def _get_minecraft_token(self, xsts_token, uhs):
+        url = "https://api.minecraftservices.com/authentication/login_with_xbox"
+        payload = {
+            "identityToken": f"XBL3.0 x={uhs};{xsts_token}"
+        }
+
+        r = requests.post(url, json=payload)
+        r.raise_for_status()
+        return r.json()["access_token"]
+
+    # ---------------- PROFILE ----------------
+    def _get_minecraft_profile(self, mc_token):
+        headers = {
+            "Authorization": f"Bearer {mc_token}"
+        }
+
+        r = requests.get(
+            "https://api.minecraftservices.com/minecraft/profile",
+            headers=headers
+        )
+        r.raise_for_status()
+        return r.json()

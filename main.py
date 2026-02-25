@@ -1,6 +1,4 @@
 import tkinter as tk
-import time
-from pathlib import Path
 from tkinter import messagebox
 from MiniCubeApp import MiniCubeApp
 from SplashScreen import SplashScreen

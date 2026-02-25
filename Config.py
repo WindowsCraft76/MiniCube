@@ -1,3 +1,4 @@
+import base64
 from pathlib import Path
 
 ### Configuration constants and utility functions for the Mini Cube application.
@@ -21,8 +22,10 @@ ACCOUNTS_FILE = DATA_DIR / "accounts.json"
 for d in [DATA_DIR, GAME_DIR, VERSIONS_DIR, ASSETS_DIR, LIBRARIES_DIR, INDEXES_DIR, OBJECTS_DIR, JAVA_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
+OBFUSCATION_KEY: bytes = b"my_secret_key"
+
 # Microsoft authentication
-CLIENT_ID = "e2341bbd-2575-4cf7-b913-f6372c1aaff1"
+CLIENT_ID = "my_client_id"
 REDIRECT_URI = "http://localhost:8080/callback"
 SCOPE = "XboxLive.signin offline_access"
 
@@ -37,3 +40,15 @@ def center_window(window, width, height):
     x = (screen_width - width) // 2
     y = (screen_height - height) // 2
     window.geometry(f"{width}x{height}+{x}+{y}")
+
+# XOR-based obfuscation for account data
+def xor_bytes(data: bytes, key: bytes) -> bytes:
+    return bytes([b ^ key[i % len(key)] for i, b in enumerate(data)])
+
+def encode_data(data: str, key: bytes) -> bytes:
+    xored = xor_bytes(data.encode("utf-8"), key)
+    return base64.b64encode(xored)
+
+def decode_data(data: bytes, key: bytes) -> str:
+    xored = base64.b64decode(data)
+    return xor_bytes(xored, key).decode("utf-8")

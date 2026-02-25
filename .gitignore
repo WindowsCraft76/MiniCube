@@ -4,7 +4,7 @@ GameFile/
 logs/
 
 # Ignore the Python execution directory
-python-3.14.2-win32/
+python*/
 
 # Ignore application files/folders
 debug.bat
