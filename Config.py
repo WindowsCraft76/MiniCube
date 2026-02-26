@@ -22,10 +22,10 @@ ACCOUNTS_FILE = DATA_DIR / "accounts.json"
 for d in [DATA_DIR, GAME_DIR, VERSIONS_DIR, ASSETS_DIR, LIBRARIES_DIR, INDEXES_DIR, OBJECTS_DIR, JAVA_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
-OBFUSCATION_KEY: bytes = b"my_secret_key"
+OBFUSCATION_KEY: bytes = b"my_secret_key"  # Key for XOR obfuscation of account data
 
 # Microsoft authentication
-CLIENT_ID = "my_client_id"
+CLIENT_ID = "e2341bbd-2575-4cf7-b913-f6372c1aaff1"
 REDIRECT_URI = "http://localhost:8080/callback"
 SCOPE = "XboxLive.signin offline_access"
 

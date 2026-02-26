@@ -101,7 +101,6 @@ class MiniCubeApp:
         self.offline_check.pack(pady=(3, 15))
 
         self.refresh_accounts_ui()
-        self.toggle_account_mode()
 
         tk.Label(root, text="Version:").pack(pady=(0, 2))
         self.version_menu = ttk.Combobox(root, textvariable=self.version_var, state="readonly")
@@ -753,7 +752,6 @@ class MiniCubeApp:
 
         return natives_dir
 
-
     # ------------------ Launch ------------------
     def launch_game(self):
         if self.download_thread and self.download_thread.is_alive():
@@ -766,6 +764,19 @@ class MiniCubeApp:
         self.launch_btn.config(text="Cancel")
         self.download_thread = threading.Thread(target=self._launch_game_thread, daemon=True)
         self.download_thread.start()
+
+    def _sanitize_args(self, args: list[str]) -> list[str]:
+        sanitized = args.copy()
+        sensitive_flags = {"--accessToken"}
+
+        i = 0
+        while i < len(sanitized):
+            if sanitized[i] in sensitive_flags and i + 1 < len(sanitized):
+                sanitized[i + 1] = "*****"
+                i += 2
+            else:
+                i += 1
+        return sanitized
 
     def _launch_game_thread(self):
         username = self.username_var.get()
@@ -842,7 +853,8 @@ class MiniCubeApp:
             "--accessToken", token
         ]
 
-        self.log(f"Command: {' '.join(args)}", "info")
+        safe_args = self._sanitize_args(args)
+        self.log(f"[Command] {' '.join(safe_args)}", "info")
 
         try:
             self.root.after(0, lambda: self.progress_label.config(text="Ready!"))
