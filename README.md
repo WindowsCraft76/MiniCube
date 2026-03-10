@@ -1,4 +1,4 @@
-# ![icon](https://github.com/WindowsCraft76/mini-cube/blob/main/Content/icon/icon_32px.png?raw=true) Mini Cube - [Download Page](https://github.com/WindowsCraft76/mini-cube/releases)
+# <img src="https://github.com/WindowsCraft76/mini-cube/blob/main/Content/icon/icon_64px.png?raw=true" alt="Icon" width="25" height="25"> Mini Cube - [Download Page](https://github.com/WindowsCraft76/mini-cube/releases)
 *A launcher Minecraft with a simple and easy-to-use interface!*
 
 ### Project Overview: 
