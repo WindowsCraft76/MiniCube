@@ -14,12 +14,16 @@ from MicrosoftAuth import MicrosoftAuth
 from AccountManager import AccountManager
 from Config import CONTENT, INDEXES_DIR, GAME_DIR, ASSETS_DIR, SETTINGS_FILE, VERSIONS_DIR, LIBRARIES_DIR, OBJECTS_DIR, JAVA_DIR, PAGE_URL, VERSION_MANIFEST, center_window
 from UpdateSystem import get_info_version, get_remote_version, is_version_lower, get_update_page_url
+from DiscordRPC import DiscordRPC
 
 ### Main application class for the Mini Cube.
 
 class MiniCubeApp:
-    def __init__(self, root):
+    def __init__(self, root, rpc=None):
         self.root = root
+        self.rpc = rpc if rpc else DiscordRPC(self)
+        if self.rpc.app is None:
+            self.rpc.app = self
 
         # Variables Default values
         self.username_var = tk.StringVar(value="Steve")
@@ -27,6 +31,7 @@ class MiniCubeApp:
         self.ram_var = tk.IntVar(value=2048)
         self.show_snapshots_var = tk.BooleanVar(value=False)
         self.show_old_var = tk.BooleanVar(value=False)
+        self.discord_rpc_var = tk.BooleanVar(value=False)  # Will be set to True by load_settings() if enabled
 
         self.download_thread = None
         self.cancel_download = False
@@ -44,7 +49,10 @@ class MiniCubeApp:
         # Load saved settings
         self.load_settings()
 
-    # ------------------ Interface ------------------
+        # Start Discord RPC only if enabled in settings
+        if self.discord_rpc_var.get():
+            self.rpc.start_rpc()
+
         self.log("Loading interface...", "info")
         # Principal window #
 
@@ -62,15 +70,15 @@ class MiniCubeApp:
         menu.add_command(label="Settings", command=self.toggle_settings_window)
         menu.add_command(label="Open folder", command=self.open_folder)
         menu.add_separator()
-        menu.add_command(label="Exit", command=root.quit)
+        menu.add_command(label="Exit", command=lambda: [self.save_settings(), self.rpc.stop_rpc(), root.update(), root.destroy()])
         self.toolbar.add_cascade(label="Menu", menu=menu)
 
         help = tk.Menu(self.toolbar, tearoff=0)
         help.add_command(
             label="About",
-            command=lambda: messagebox.showinfo("About", f"Mini Cube\n\nCreate by WindowsCraft76\nVersion: {get_info_version()}"))
-        help.add_command(label="Terms of use", command=lambda: webbrowser.open(f"{PAGE_URL}/blob/main/TERMS_OF_USE.md"))
-        help.add_command(label="Privacy statement", command=lambda: webbrowser.open(f"{PAGE_URL}/blob/main/PRIVACY.md"))
+            command=lambda: messagebox.showinfo("About", f"Mini Cube\n\nCreate by WindowsCraft76\nVersion: {get_info_version()}\nCommit: {self._get_release_commit()}"))
+        help.add_command(label="Terms of Use", command=lambda: webbrowser.open(f"{PAGE_URL}/blob/main/TERMS_OF_USE.md"))
+        help.add_command(label="Privacy Policy", command=lambda: webbrowser.open(f"{PAGE_URL}/blob/main/PRIVACY_POLICY.md"))
         help.add_command(label="Open page", command=lambda: webbrowser.open(PAGE_URL))
         self.toolbar.add_cascade(label="Help", menu=help)
 
@@ -106,7 +114,7 @@ class MiniCubeApp:
         self.version_menu = ttk.Combobox(root, textvariable=self.version_var, state="readonly")
         self.version_menu.pack(pady=(0, 0))
 
-        self.snapshot_check = tk.Checkbutton(root, text="Show snapshots", variable=self.show_snapshots_var, command=lambda: [self.refresh_version_list(), self.save_settings()])
+        self.snapshot_check = tk.Checkbutton(root, text="Show snapshots", variable=self.show_snapshots_var, command=self.refresh_version_list)
         self.snapshot_check.pack(pady=(3, 0))
 
         self.launch_btn = tk.Button(root, text="Launch game", command=lambda: [ self.save_settings(), self.update_progress(0, 1, "Loading..."), style.configure("blue.Horizontal.TProgressbar", background='green'), self.launch_game()])
@@ -127,10 +135,40 @@ class MiniCubeApp:
         self.refresh_version_list()
 
 
+    # Git release commit #
+    def _get_release_commit(self):
+        version = get_info_version()
+
+        if "not found" in version.lower() or "error" in version.lower():
+            return "Not found"
+
+        try:
+            api_url = f"https://api.github.com/repos/WindowsCraft76/mini-cube/git/ref/tags/{version}"
+            req = urllib.request.Request(api_url, headers={"User-Agent": "MiniCube"})
+            with urllib.request.urlopen(req, timeout=5) as response:
+                data = json.loads(response.read().decode())
+
+            sha = data.get("object", {}).get("sha", "")
+
+            # If the tag is annotated, resolve the tag object to get the commit sha
+            if data.get("object", {}).get("type") == "tag":
+                tag_url = data["object"]["url"]
+                req2 = urllib.request.Request(tag_url, headers={"User-Agent": "MiniCube"})
+                with urllib.request.urlopen(req2, timeout=5) as response2:
+                    tag_data = json.loads(response2.read().decode())
+                sha = tag_data.get("object", {}).get("sha", sha)
+
+            return sha[:7] if sha else "Not found"
+
+        except Exception:
+            return "Not found"
+
     # Settings window #
     def toggle_settings_window(self):
         if getattr(self, "settings_window", None) and self.settings_window.winfo_exists():
             try:
+                # Re-sync UI values from settings file before showing
+                self._sync_settings_from_file()
                 self.settings_window.deiconify()
                 self.settings_window.lift()
                 self.settings_window.focus_force()
@@ -138,23 +176,46 @@ class MiniCubeApp:
                 pass
             return
 
+        # Sync settings from file before opening
+        self._sync_settings_from_file()
+
         # Main
         self.settings_window = tk.Toplevel(self.root)
         self.settings_window.title("Settings")
         self.settings_window.resizable(False, False)
         self.settings_window.iconbitmap(f"{CONTENT}\\icon\\icon_32px.ico")
-        center_window(self.settings_window, 360, 150)
+        center_window(self.settings_window, 350, 180)
 
         # UI
         tk.Label(self.settings_window, text="RAM Memory (MB):").pack(pady=2)
-        self.ram_spin = tk.Spinbox(self.settings_window, from_=512, to=16384, increment=512, textvariable=self.ram_var, command=self.save_settings)
+
+        # Temp variable for RAM (only applied on Save)
+        self._temp_ram_var = tk.IntVar(value=self.ram_var.get())
+        self.ram_spin = tk.Spinbox(self.settings_window, from_=512, to=16384, increment=512, textvariable=self._temp_ram_var)
         self.ram_spin.pack(pady=5)
 
-        self.old_check = tk.Checkbutton(self.settings_window, text="Show historical versions", variable=self.show_old_var, command=lambda: [self.refresh_version_list(), self.save_settings()])
+        # Temp variables for checkboxes (only applied on Save)
+        self._temp_show_old_var = tk.BooleanVar(value=self.show_old_var.get())
+        self._temp_discord_rpc_var = tk.BooleanVar(value=self.discord_rpc_var.get())
+
+        self.old_check = tk.Checkbutton(self.settings_window, text="Show historical versions", variable=self._temp_show_old_var)
         self.old_check.pack(pady=5)
 
-        self.reset_btn = tk.Button(self.settings_window, text="Reset settings", command=self.reset_settings)
-        self.reset_btn.pack(pady=(20, 5))
+        self.discord_rpc_check = tk.Checkbutton(
+            self.settings_window,
+            text="Enable Discord RPC",
+            variable=self._temp_discord_rpc_var
+        )
+        self.discord_rpc_check.pack(pady=5)
+
+        btn_frame = tk.Frame(self.settings_window)
+        btn_frame.pack(pady=(20, 5))
+
+        self.save_btn = tk.Button(btn_frame, text="Save", command=lambda: [self._apply_settings_from_temp(), self.save_settings()])
+        self.save_btn.pack(side=tk.LEFT, padx=5)
+
+        self.reset_btn = tk.Button(btn_frame, text="Reset settings", command=self.reset_settings)
+        self.reset_btn.pack(side=tk.LEFT, padx=5)
 
         def _on_close():
             try:
@@ -334,6 +395,7 @@ class MiniCubeApp:
             self.ram_var.set(data.get("ram", 2048))
             self.show_snapshots_var.set(data.get("show_snapshots", False))
             self.show_old_var.set(data.get("show_old_versions", False))
+            self.discord_rpc_var.set(data.get("discord_rpc", True))
 
             self.log("Settings loaded!", "success")
         except Exception as e:
@@ -344,7 +406,8 @@ class MiniCubeApp:
             "username": self.username_var.get(),
             "ram": self.ram_var.get(),
             "show_snapshots": self.show_snapshots_var.get(),
-            "show_old_versions": self.show_old_var.get()
+            "show_old_versions": self.show_old_var.get(),
+            "discord_rpc": self.discord_rpc_var.get()
         }
 
         try:
@@ -359,14 +422,74 @@ class MiniCubeApp:
         self.ram_var.set(2048)
         self.show_snapshots_var.set(False)
         self.show_old_var.set(False)
+        self.discord_rpc_var.set(True)
 
         if SETTINGS_FILE.exists():
             SETTINGS_FILE.unlink()
 
         self.log("Settings reset to defaults!", "info")
-
+        self._apply_discord_rpc()
         self.load_settings()
     
+    def _sync_settings_from_file(self):
+        if not SETTINGS_FILE.exists():
+            return
+
+        try:
+            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            self.username_var.set(data.get("username", "Steve"))
+            self.ram_var.set(data.get("ram", 2048))
+
+            new_show_snapshots = data.get("show_snapshots", False)
+            new_show_old = data.get("show_old_versions", False)
+            new_discord_rpc = data.get("discord_rpc", True)
+
+            # Apply show_snapshots only if value changed to avoid unnecessary refresh
+            if self.show_snapshots_var.get() != new_show_snapshots:
+                self.show_snapshots_var.set(new_show_snapshots)
+                self.refresh_version_list()
+
+            # Apply show_old_versions only if value changed
+            if self.show_old_var.get() != new_show_old:
+                self.show_old_var.set(new_show_old)
+                self.refresh_version_list()
+
+            # Apply Discord RPC only if the value changed
+            if self.discord_rpc_var.get() != new_discord_rpc:
+                self.discord_rpc_var.set(new_discord_rpc)
+                self._apply_discord_rpc()
+
+            self.log("Settings synced from file.", "info")
+        except Exception as e:
+            self.log(f"Error syncing settings from file: {e}", "error")
+
+    def _apply_settings_from_temp(self):
+        """Apply temp variables from Settings window to real variables, then trigger side effects."""
+        self.ram_var.set(self._temp_ram_var.get())
+
+        old_changed = self.show_old_var.get() != self._temp_show_old_var.get()
+        self.show_old_var.set(self._temp_show_old_var.get())
+        if old_changed:
+            self.refresh_version_list()
+
+        rpc_changed = self.discord_rpc_var.get() != self._temp_discord_rpc_var.get()
+        self.discord_rpc_var.set(self._temp_discord_rpc_var.get())
+        if rpc_changed:
+            self._apply_discord_rpc()
+
+    def _apply_discord_rpc(self):
+        if self.discord_rpc_var.get():
+            if not self.rpc.is_running():
+                self.rpc.start_rpc()
+        else:
+            if self.rpc.is_running():
+                self.rpc.stop_rpc()
+
+    def _toggle_discord_rpc(self):
+        self._apply_discord_rpc()
+
     # ------------------ Toggle account mode ------------------
     def toggle_account_mode(self):
         has_official = len(self.account_manager.get_all_accounts()) > 0
@@ -858,6 +981,7 @@ class MiniCubeApp:
 
         try:
             self.root.after(0, lambda: self.progress_label.config(text="Ready!"))
+            self.rpc.update_state(f"Playing Minecraft {version_id}")
             game_process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         except Exception as e:
             self.log(f"[ERROR] Unable to start Java process: {e}", "error")
@@ -876,3 +1000,4 @@ class MiniCubeApp:
         self.root.after(0, lambda: self.progress_label.config(text="Game closed"))
         self.root.after(0, lambda: style.configure("blue.Horizontal.TProgressbar", background='red'))
         self.log("=== Game finished ===", "info")
+        self.rpc.update_state("In the launcher")

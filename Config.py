@@ -24,6 +24,9 @@ for d in [DATA_DIR, GAME_DIR, VERSIONS_DIR, ASSETS_DIR, LIBRARIES_DIR, INDEXES_D
 
 OBFUSCATION_KEY: bytes = b"my_secret_key"  # Key for XOR obfuscation of account data
 
+# Discord Rich Presence
+CLIENT_ID_RPC = "1476290026626355231"
+
 # Microsoft authentication
 CLIENT_ID = "e2341bbd-2575-4cf7-b913-f6372c1aaff1"
 REDIRECT_URI = "http://localhost:8080/callback"
@@ -32,6 +35,7 @@ SCOPE = "XboxLive.signin offline_access"
 # URLs and version management
 VERSION_MANIFEST = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json"
 PAGE_URL = "https://github.com/WindowsCraft76/mini-cube"
+
 
 # Utility function to center a Tkinter window on the screen
 def center_window(window, width, height):
