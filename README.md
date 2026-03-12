@@ -58,6 +58,11 @@ Please read the project policies:
 * [Terms of Service](https://github.com/WindowsCraft76/mini-cube/blob/main/TERMS_OF_SERVICE.md)
 * [Privacy Policy](https://github.com/WindowsCraft76/mini-cube/blob/main/PRIVACY_POLICY.md)
 
+Mini Cube is an independent Minecraft launcher.
+
+This project is not affiliated with Mojang Studios or Microsoft.
+Minecraft is a trademark of Mojang Studios.
+
 ---
 
 ## 📄 License
