@@ -207,3 +207,48 @@ class MicrosoftAuth:
         )
         r.raise_for_status()
         return r.json()
+
+    # ---------------- REFRESH TOKEN ----------------
+    def refresh_token(self, account_data: dict):
+        refresh_tok = account_data.get("refresh_token")
+        if not refresh_tok:
+            if self.app:
+                self.app.log("No refresh token found for this account. Please log in again.", "error")
+            return None
+
+        try:
+            if self.app:
+                self.app.log(f"Refreshing token for {account_data.get('username')}...", "info")
+
+            url = "https://login.live.com/oauth20_token.srf"
+            data = {
+                "client_id": CLIENT_ID,
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_tok,
+                "redirect_uri": REDIRECT_URI,
+                "scope": SCOPE
+            }
+
+            r = requests.post(url, data=data)
+            r.raise_for_status()
+            js = r.json()
+
+            new_ms_access = js["access_token"]
+            new_ms_refresh = js.get("refresh_token", refresh_tok)
+
+            xbl_token = self._get_xbox_live_token(new_ms_access)
+            xsts_token, uhs = self._get_xsts_token(xbl_token)
+            mc_token = self._get_minecraft_token(xsts_token, uhs)
+
+            account_data["access_token"] = mc_token
+            account_data["refresh_token"] = new_ms_refresh
+
+            if self.app:
+                self.app.log(f"Token refreshed successfully for {account_data.get('username')}.", "success")
+
+            return account_data
+
+        except Exception as e:
+            if self.app:
+                self.app.log(f"Token refresh failed: {e}", "error")
+            return None

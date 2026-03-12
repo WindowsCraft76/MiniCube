@@ -1,6 +1,7 @@
 import time
 from pypresence import Presence
 from Config import CLIENT_ID_RPC
+from UpdateSystem import get_info_version
 
 class DiscordRPC:
     def __init__(self, app=None):
@@ -8,14 +9,13 @@ class DiscordRPC:
         self.rpc = None
         self.start_time = None
 
-    def _update(self, state: str, details: str = None):
+    def _update(self, details: str):
         if not self.rpc:
             return
         try:
             self.rpc.update(
                 large_image="logo_1024x1024",
-                large_text="Mini Cube",
-                state=state,
+                large_text=f"Mini Cube - {get_info_version()}",
                 details=details,
                 start=self.start_time,
                 buttons=[{"label": "Download Mini Cube", "url": "https://github.com/WindowsCraft76/mini-cube/releases"}]
@@ -30,7 +30,7 @@ class DiscordRPC:
             self.rpc = Presence(CLIENT_ID_RPC)
             self.rpc.connect()
             self.start_time = time.time()
-            self._update(state="In the launcher")
+            self._update(details="In the launcher")
             if self.app:
                 self.app.log("Successfully connected to Discord RPC", "success")
         except Exception as e:
@@ -38,8 +38,8 @@ class DiscordRPC:
                 self.app.log(f"Failed to connect to Discord RPC!", "error")
             self.rpc = None
 
-    def update_state(self, state: str, details: str = None):
-        self._update(state=state, details=details)
+    def update_details(self, details: str):
+        self._update(details=details)
 
     def is_running(self):
         return self.rpc is not None

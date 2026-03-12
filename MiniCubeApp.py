@@ -76,7 +76,7 @@ class MiniCubeApp:
         help = tk.Menu(self.toolbar, tearoff=0)
         help.add_command(
             label="About",
-            command=lambda: messagebox.showinfo("About", f"Mini Cube\n\nCreate by WindowsCraft76\nVersion: {get_info_version()}\nCommit: {self._get_release_commit()}"))
+            command=lambda: messagebox.showinfo("About", f"Mini Cube\n\nCreate by WindowsCraft76\n\nVersion: {get_info_version()}\nCommit: {self._get_release_commit()}"))
         help.add_command(label="Terms of Use", command=lambda: webbrowser.open(f"{PAGE_URL}/blob/main/TERMS_OF_USE.md"))
         help.add_command(label="Privacy Policy", command=lambda: webbrowser.open(f"{PAGE_URL}/blob/main/PRIVACY_POLICY.md"))
         help.add_command(label="Open page", command=lambda: webbrowser.open(PAGE_URL))
@@ -134,35 +134,6 @@ class MiniCubeApp:
         self.check_version_mismatch_async()
         self.refresh_version_list()
 
-
-    # Git release commit #
-    def _get_release_commit(self):
-        version = get_info_version()
-
-        if "not found" in version.lower() or "error" in version.lower():
-            return "Not found"
-
-        try:
-            api_url = f"https://api.github.com/repos/WindowsCraft76/mini-cube/git/ref/tags/{version}"
-            req = urllib.request.Request(api_url, headers={"User-Agent": "MiniCube"})
-            with urllib.request.urlopen(req, timeout=5) as response:
-                data = json.loads(response.read().decode())
-
-            sha = data.get("object", {}).get("sha", "")
-
-            # If the tag is annotated, resolve the tag object to get the commit sha
-            if data.get("object", {}).get("type") == "tag":
-                tag_url = data["object"]["url"]
-                req2 = urllib.request.Request(tag_url, headers={"User-Agent": "MiniCube"})
-                with urllib.request.urlopen(req2, timeout=5) as response2:
-                    tag_data = json.loads(response2.read().decode())
-                sha = tag_data.get("object", {}).get("sha", sha)
-
-            return sha[:7] if sha else "Not found"
-
-        except Exception:
-            return "Not found"
-
     # Settings window #
     def toggle_settings_window(self):
         if getattr(self, "settings_window", None) and self.settings_window.winfo_exists():
@@ -189,12 +160,10 @@ class MiniCubeApp:
         # UI
         tk.Label(self.settings_window, text="RAM Memory (MB):").pack(pady=2)
 
-        # Temp variable for RAM (only applied on Save)
         self._temp_ram_var = tk.IntVar(value=self.ram_var.get())
         self.ram_spin = tk.Spinbox(self.settings_window, from_=512, to=16384, increment=512, textvariable=self._temp_ram_var)
         self.ram_spin.pack(pady=5)
 
-        # Temp variables for checkboxes (only applied on Save)
         self._temp_show_old_var = tk.BooleanVar(value=self.show_old_var.get())
         self._temp_discord_rpc_var = tk.BooleanVar(value=self.discord_rpc_var.get())
 
@@ -377,6 +346,34 @@ class MiniCubeApp:
         self.account_manager.remove_account(username)
         self.refresh_account_listbox()
         self.refresh_accounts_ui()
+
+    # ------------------ Git commit ------------------
+    def _get_release_commit(self):
+        version = get_info_version()
+
+        if "not found" in version.lower() or "error" in version.lower():
+            return "Not found"
+
+        try:
+            api_url = f"https://api.github.com/repos/WindowsCraft76/mini-cube/git/ref/tags/{version}"
+            req = urllib.request.Request(api_url, headers={"User-Agent": "MiniCube"})
+            with urllib.request.urlopen(req, timeout=5) as response:
+                data = json.loads(response.read().decode())
+
+            sha = data.get("object", {}).get("sha", "")
+
+            # If the tag is annotated, resolve the tag object to get the commit sha
+            if data.get("object", {}).get("type") == "tag":
+                tag_url = data["object"]["url"]
+                req2 = urllib.request.Request(tag_url, headers={"User-Agent": "MiniCube"})
+                with urllib.request.urlopen(req2, timeout=5) as response2:
+                    tag_data = json.loads(response2.read().decode())
+                sha = tag_data.get("object", {}).get("sha", sha)
+
+            return sha[:7] if sha else "Not found"
+
+        except Exception:
+            return "Not found"
 
     # ------------------ Settings Save/Load ------------------
     def load_settings(self):
@@ -642,13 +639,17 @@ class MiniCubeApp:
         self.version_menu.config(state=combo_state)
 
         self.offline_entry.config(state=normal_state)
+        self.offline_check.config(state=normal_state)
         self.snapshot_check.config(state=normal_state)
-        self.launch_btn.config(state=normal_state)
+        # launch_btn stays always enabled (acts as "Cancel" during installation)
+        # but we restore its state explicitly when re-enabling the UI
+        if enabled:
+            self.launch_btn.config(state="normal")
 
-        if hasattr(self, "ram_spin") and self.ram_spin:
+        if hasattr(self, "ram_spin") and self.ram_spin.winfo_exists():
             self.ram_spin.config(state=normal_state)
 
-        if hasattr(self, "old_check") and self.old_check:
+        if hasattr(self, "old_check") and self.old_check and self.old_check.winfo_exists():
             self.old_check.config(state=normal_state)
 
     # ------------------ Progress ------------------
@@ -906,6 +907,9 @@ class MiniCubeApp:
         version_id = self.version_var.get()
         ram = self.ram_var.get()
 
+        # Lock UI immediately when the game starts launching
+        self.root.after(0, lambda: self.set_ui_state(False))
+
         if not self.is_offline_var.get():
             account_name = self.selected_account_var.get()
             account_data = self.account_manager.get_account_by_name(account_name)
@@ -916,6 +920,7 @@ class MiniCubeApp:
                     "Please select an account or enable offline mode."
                 ))
                 self.root.after(0, lambda: self.launch_btn.config(text="Launch game"))
+                self.root.after(0, lambda: self.set_ui_state(True))
                 return
 
         try:
@@ -927,9 +932,8 @@ class MiniCubeApp:
         except Exception as e:
             self.root.after(0, lambda: messagebox.showerror("Error", f"Unable to prepare the version: {e}"))
             self.root.after(0, lambda: self.launch_btn.config(text="Launch game"))
+            self.root.after(0, lambda: self.set_ui_state(True))
             return
-
-        self.root.after(0, lambda: self.set_ui_state(False))
 
         classpath = []
         for lib in version_data.get("libraries", []):
@@ -956,6 +960,23 @@ class MiniCubeApp:
         else:
             account_name = self.selected_account_var.get()
             account_data = self.account_manager.get_account_by_name(account_name)
+
+            # Refresh the Microsoft/Minecraft token before launching
+            auth = MicrosoftAuth(app=self)
+            refreshed = auth.refresh_token(account_data)
+            if refreshed:
+                account_data = refreshed
+                self.account_manager.remove_account(account_data['username'])
+                self.account_manager.add_account(account_data)
+            else:
+                self.root.after(0, lambda: messagebox.showerror(
+                    "Authentication Error",
+                    f"Failed to refresh token for {account_data.get('username')}.\nPlease log in again."
+                ))
+                self.root.after(0, lambda: self.launch_btn.config(text="Launch game"))
+                self.root.after(0, lambda: self.set_ui_state(True))
+                return
+
             active_user = account_data['username']
             uuid = account_data['uuid']
             token = account_data['access_token']
@@ -980,9 +1001,10 @@ class MiniCubeApp:
         self.log(f"[Command] {' '.join(safe_args)}", "info")
 
         try:
-            self.root.after(0, lambda: self.progress_label.config(text="Ready!"))
-            self.rpc.update_state(f"Playing Minecraft {version_id}")
+            self.root.after(0, lambda: self.progress_label.config(text="Game running..."))
+            self.rpc.update_details(f"Playing Minecraft {version_id}")
             game_process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            self.root.after(0, lambda: self.launch_btn.config(state="disabled", text="Ready!"))
         except Exception as e:
             self.log(f"[ERROR] Unable to start Java process: {e}", "error")
             self.root.after(0, lambda: self.launch_btn.config(text="Launch game"))
@@ -1000,4 +1022,4 @@ class MiniCubeApp:
         self.root.after(0, lambda: self.progress_label.config(text="Game closed"))
         self.root.after(0, lambda: style.configure("blue.Horizontal.TProgressbar", background='red'))
         self.log("=== Game finished ===", "info")
-        self.rpc.update_state("In the launcher")
+        self.rpc.update_details("In the launcher")
