@@ -61,7 +61,7 @@ class MiniCubeApp:
         self.root.title("Mini Cube")
         self.root.geometry("350x310")
         self.root.resizable(False, False)
-        self.root.iconbitmap(f"{CONTENT}\\icon\\icon_32px.ico")
+        self.root.iconbitmap(f"{CONTENT}\\icon\\icon_32x32.ico")
 
         # Menu bar
         self.toolbar = tk.Menu(root)
@@ -155,7 +155,7 @@ class MiniCubeApp:
         self.settings_window = tk.Toplevel(self.root)
         self.settings_window.title("Settings")
         self.settings_window.resizable(False, False)
-        self.settings_window.iconbitmap(f"{CONTENT}\\icon\\icon_32px.ico")
+        self.settings_window.iconbitmap(f"{CONTENT}\\icon\\icon_32x32.ico")
         center_window(self.settings_window, 350, 180)
 
         # UI
@@ -228,7 +228,7 @@ class MiniCubeApp:
         else:
             self.log_window = tk.Toplevel(self.root)
             self.log_window.title("Logs")
-            self.log_window.iconbitmap(f"{CONTENT}\\icon\\icon_32px.ico")
+            self.log_window.iconbitmap(f"{CONTENT}\\icon\\icon_32x32.ico")
             self.log_window.geometry("600x300")
             self.log_window.protocol("WM_DELETE_WINDOW", self._on_close_log_window)
 
@@ -271,7 +271,7 @@ class MiniCubeApp:
         # Main
         self.acc_win = tk.Toplevel(self.root)
         self.acc_win.title("Accounts Manager")
-        self.acc_win.iconbitmap(f"{CONTENT}\\icon\\icon_32px.ico")
+        self.acc_win.iconbitmap(f"{CONTENT}\\icon\\icon_32x32.ico")
         self.acc_win.resizable(False, False)
         center_window(self.acc_win, 300, 250)
 

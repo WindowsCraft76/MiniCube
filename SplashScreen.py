@@ -7,7 +7,7 @@ class SplashScreen:
         self.root.overrideredirect(True)
         self.root.configure(bg="#2b2b2b")
 
-        logo = tk.PhotoImage(file=f"{CONTENT}\\icon\\icon_64px.png")
+        logo = tk.PhotoImage(file=f"{CONTENT}\\logo\\logo_64x64.png")
         logo_label = tk.Label(self.root, image=logo, bg="#2b2b2b")
         logo_label.image = logo
         logo_label.pack(side="left", padx=10, pady=10)
