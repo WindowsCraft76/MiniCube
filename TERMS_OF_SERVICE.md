@@ -1,4 +1,4 @@
-# Terms of Service -- Mini Cube
+# Terms of Service - Mini Cube
 
 **Last updated:** 2026-03-14
 

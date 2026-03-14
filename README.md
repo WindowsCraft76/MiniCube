@@ -57,6 +57,7 @@ Please read the project policies:
 
 * [Terms of Service](https://github.com/WindowsCraft76/mini-cube/blob/main/TERMS_OF_SERVICE.md)
 * [Privacy Policy](https://github.com/WindowsCraft76/mini-cube/blob/main/PRIVACY_POLICY.md)
+* [Disclaimer](https://github.com/WindowsCraft76/mini-cube/blob/main/DISCLAIMER.md)
 
 Mini Cube is an independent Minecraft launcher.
 

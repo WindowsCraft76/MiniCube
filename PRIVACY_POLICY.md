@@ -1,4 +1,4 @@
-# Privacy Policy -- Mini Cube
+# Privacy Policy - Mini Cube
 
 **Last updated:** 2026-03-14
 
