@@ -219,6 +219,11 @@ class MicrosoftAuth:
         try:
             if self.app:
                 self.app.log(f"Refreshing token for {account_data.get('username')}...", "info")
+                if self.app:
+                    self.app.root.after(
+                        0,
+                        lambda: self.app.progress_label.config(text=f"Refreshing token...")
+                    )
 
             url = "https://login.live.com/oauth20_token.srf"
             data = {

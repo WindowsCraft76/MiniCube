@@ -35,6 +35,7 @@ class MiniCubeApp:
 
         self.download_thread = None
         self.cancel_download = False
+        self._ui_locked = False
 
         self.account_manager = AccountManager(app=self)
         self.selected_account_var = tk.StringVar()
@@ -185,6 +186,10 @@ class MiniCubeApp:
 
         self.reset_btn = tk.Button(btn_frame, text="Reset settings", command=self.reset_settings)
         self.reset_btn.pack(side=tk.LEFT, padx=5)
+
+        if self._ui_locked:
+            self.ram_spin.config(state="disabled")
+            self.old_check.config(state="disabled")
 
         def _on_close():
             try:
@@ -632,6 +637,7 @@ class MiniCubeApp:
 
     # ------------------ UI lock/unlock ------------------
     def set_ui_state(self, enabled: bool):
+        self._ui_locked = not enabled
         normal_state = "normal" if enabled else "disabled"
         combo_state = "readonly" if enabled else "disabled"
 
@@ -641,8 +647,6 @@ class MiniCubeApp:
         self.offline_entry.config(state=normal_state)
         self.offline_check.config(state=normal_state)
         self.snapshot_check.config(state=normal_state)
-        # launch_btn stays always enabled (acts as "Cancel" during installation)
-        # but we restore its state explicitly when re-enabling the UI
         if enabled:
             self.launch_btn.config(state="normal")
 
