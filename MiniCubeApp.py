@@ -31,7 +31,7 @@ class MiniCubeApp:
         self.ram_var = tk.IntVar(value=2048)
         self.show_snapshots_var = tk.BooleanVar(value=False)
         self.show_old_var = tk.BooleanVar(value=False)
-        self.discord_rpc_var = tk.BooleanVar(value=False)  # Will be set to True by load_settings() if enabled
+        self.discord_rpc_var = tk.BooleanVar(value=True)
 
         self.download_thread = None
         self.cancel_download = False
