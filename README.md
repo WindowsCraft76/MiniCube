@@ -1,8 +1,8 @@
 # <img src="https://github.com/WindowsCraft76/mini-cube/blob/main/Content/logo/logo_64x64.png?raw=true" alt="Mini Cube Icon" width="25" height="25"> Mini Cube
 
-![GitHub release](https://img.shields.io/github/v/release/WindowsCraft76/mini-cube)
-![License](https://img.shields.io/github/license/WindowsCraft76/mini-cube)
-![Python](https://img.shields.io/badge/python-3.14-blue)
+[![GitHub release](https://img.shields.io/github/v/release/WindowsCraft76/mini-cube)](https://github.com/WindowsCraft76/mini-cube/releases)
+[![License](https://img.shields.io/github/license/WindowsCraft76/mini-cube)](https://github.com/WindowsCraft76/mini-cube/blob/main/LICENSE)
+[![Python](https://img.shields.io/badge/python-3.14-blue)](https://www.python.org/downloads/release/python-3140/)
 
 *A lightweight and simple Minecraft launcher.*
 
