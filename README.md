@@ -3,6 +3,7 @@
 [![GitHub release](https://img.shields.io/github/v/release/WindowsCraft76/mini-cube)](https://github.com/WindowsCraft76/mini-cube/releases)
 [![License](https://img.shields.io/github/license/WindowsCraft76/mini-cube)](https://github.com/WindowsCraft76/mini-cube/blob/main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.14-blue)](https://www.python.org/downloads/release/python-3140/)
+[![ko-fi](https://img.shields.io/badge/Support_me_on_Ko--fi-FF5A16)](https://ko-fi.com/X8X81VIGPB)
 
 *A lightweight and simple Minecraft launcher.*
 
