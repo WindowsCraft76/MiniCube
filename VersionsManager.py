@@ -1,9 +1,11 @@
+# Version management functions for checking updates and comparing versions.
+
 import subprocess
 import winreg
 import re
+import urllib
+import json
 from Config import PAGE_URL
-
-### Functions to check for updates and compare versions.
 
 def get_info_version():
     reg_path = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\Mini Cube"
@@ -89,3 +91,29 @@ def get_update_page_url(remote_version=None):
         return PAGE_URL
 
     return f"{PAGE_URL}/releases/tag/{remote_version}"
+
+def get_release_commit():
+    version = get_info_version()
+
+    if "not found" in version.lower() or "error" in version.lower():
+        return "Not found"
+
+    try:
+        api_url = f"https://api.github.com/repos/WindowsCraft76/mini-cube/git/ref/tags/{version}"
+        req = urllib.request.Request(api_url, headers={"User-Agent": "MiniCube"})
+        with urllib.request.urlopen(req, timeout=5) as response:
+            data = json.loads(response.read().decode())
+
+        sha = data.get("object", {}).get("sha", "")
+
+        if data.get("object", {}).get("type") == "tag":
+            tag_url = data["object"]["url"]
+            req2 = urllib.request.Request(tag_url, headers={"User-Agent": "MiniCube"})
+            with urllib.request.urlopen(req2, timeout=5) as response2:
+                tag_data = json.loads(response2.read().decode())
+            sha = tag_data.get("object", {}).get("sha", sha)
+
+        return sha[:7] if sha else "Not found"
+
+    except Exception:
+        return "Not found"

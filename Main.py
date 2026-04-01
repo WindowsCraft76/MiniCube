@@ -1,10 +1,10 @@
+# Main entry point for the application
+
 import tkinter as tk
 from tkinter import messagebox
 from MiniCubeApp import MiniCubeApp
 from SplashScreen import SplashScreen
 from DiscordRPC import DiscordRPC
-
-### Main entry point for the Mini Cube application. Initializes the splash screen and then launches the main application window.
 
 def main():
     root = tk.Tk()

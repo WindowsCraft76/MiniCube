@@ -1,6 +1,7 @@
+# Account management class for handling user accounts in the application.
+
 import json
 from Config import ACCOUNTS_FILE, encode_data, decode_data
-
 
 class AccountManager:
     def __init__(self, app=None):

@@ -1,13 +1,12 @@
+# Configuration file for Mini Cube Launcher
+
 import base64
 import secrets
 from pathlib import Path
-
 import keyring
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
-
-### Configuration constants and utility functions for the Mini Cube application.
 
 # Define paths for game files, data, and content
 BASE_DIR = Path(__file__).resolve().parent
@@ -24,7 +23,7 @@ JAVA_DIR = GAME_DIR / "java_versions"
 
 SETTINGS_FILE = DATA_DIR / "settings.json"
 ACCOUNTS_FILE = DATA_DIR / "accounts.json"
-SALT_FILE = DATA_DIR / ".salt"  # Salt file for key derivation (not secret, but necessary)
+SALT_FILE = DATA_DIR / ".salt"
 
 for d in [DATA_DIR, GAME_DIR, VERSIONS_DIR, ASSETS_DIR, LIBRARIES_DIR, INDEXES_DIR, OBJECTS_DIR, JAVA_DIR]:
     d.mkdir(parents=True, exist_ok=True)
@@ -46,18 +45,16 @@ PAGE_URL = "https://github.com/WindowsCraft76/mini-cube"
 _KEYRING_SERVICE = "MiniCubeLauncher"
 _KEYRING_USERNAME = "account_secret"
 
-
+# Functions for secure key management and encryption/decryption of sensitive data.
 def _get_or_create_secret() -> bytes:
     secret_hex = keyring.get_password(_KEYRING_SERVICE, _KEYRING_USERNAME)
 
     if secret_hex is None:
-        # First launch: generate a new random secret and persist it
         raw_secret = secrets.token_bytes(32)
         secret_hex = raw_secret.hex()
         keyring.set_password(_KEYRING_SERVICE, _KEYRING_USERNAME, secret_hex)
 
     return bytes.fromhex(secret_hex)
-
 
 def _get_or_create_salt() -> bytes:
     if SALT_FILE.exists():
@@ -67,7 +64,6 @@ def _get_or_create_salt() -> bytes:
     SALT_FILE.write_bytes(salt)
     return salt
 
-
 def _derive_fernet_key() -> bytes:
     secret = _get_or_create_secret()
     salt = _get_or_create_salt()
@@ -76,19 +72,14 @@ def _derive_fernet_key() -> bytes:
         algorithm=hashes.SHA256(),
         length=32,
         salt=salt,
-        iterations=600_000,  # NIST-recommended minimum for 2024
+        iterations=600_000,
     )
     raw_key = kdf.derive(secret)
     return base64.urlsafe_b64encode(raw_key)
 
-
 def _get_fernet() -> "Fernet":
-    """Return a ready-to-use Fernet instance with the derived key."""
     return Fernet(_derive_fernet_key())
 
-
-#  Public encode / decode API
-#  Drop-in replacement for the old XOR helpers.
 def encode_data(data: str, key: bytes = None) -> bytes:
     return _get_fernet().encrypt(data.encode("utf-8"))
 
@@ -97,7 +88,7 @@ def decode_data(data: bytes, key: bytes = None) -> str:
     return _get_fernet().decrypt(data).decode("utf-8")
 
 
-#  Center window
+# Center window
 def center_window(window, width, height):
     screen_width = window.winfo_screenwidth()
     screen_height = window.winfo_screenheight()

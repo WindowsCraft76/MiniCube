@@ -7,7 +7,6 @@ logs/
 python*/
 
 # Ignore application files/folders
-debug.bat
 settings.json
 __pycache__/
 Data/

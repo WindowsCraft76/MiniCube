@@ -1,7 +1,9 @@
+# Discord rpc class, used to manage the discord rpc presence of the app
+
 import time
 from pypresence import Presence
 from Config import CLIENT_ID_RPC
-from UpdateSystem import get_info_version
+from VersionsManager import get_info_version
 
 class DiscordRPC:
     def __init__(self, app=None):

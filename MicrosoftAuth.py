@@ -1,4 +1,6 @@
-﻿import webbrowser
+# Microsoft authentication class, handles the entire OAuth flow and token management for Microsoft accounts used in Minecraft authentication.
+
+import webbrowser
 import http.server
 import socketserver
 import threading
@@ -7,7 +9,6 @@ import time
 import requests
 from tkinter import messagebox
 from Config import CLIENT_ID, REDIRECT_URI, SCOPE
-
 
 class MicrosoftAuth:
     HTML_SUCCESS = """
@@ -131,7 +132,6 @@ class MicrosoftAuth:
 
         threading.Thread(target=run_server, daemon=True).start()
 
-    # ---------------- MICROSOFT TOKEN ----------------
     def _get_microsoft_token(self, code):
         url = "https://login.live.com/oauth20_token.srf"
         data = {
@@ -148,7 +148,6 @@ class MicrosoftAuth:
 
         return js["access_token"], js.get("refresh_token", "")
 
-    # ---------------- XBOX LIVE ----------------
     def _get_xbox_live_token(self, ms_access):
         url = "https://user.auth.xboxlive.com/user/authenticate"
         payload = {
@@ -184,7 +183,6 @@ class MicrosoftAuth:
         uhs = js["DisplayClaims"]["xui"][0]["uhs"]
         return js["Token"], uhs
 
-    # ---------------- MINECRAFT TOKEN ----------------
     def _get_minecraft_token(self, xsts_token, uhs):
         url = "https://api.minecraftservices.com/authentication/login_with_xbox"
         payload = {
@@ -195,7 +193,6 @@ class MicrosoftAuth:
         r.raise_for_status()
         return r.json()["access_token"]
 
-    # ---------------- PROFILE ----------------
     def _get_minecraft_profile(self, mc_token):
         headers = {
             "Authorization": f"Bearer {mc_token}"
@@ -208,7 +205,6 @@ class MicrosoftAuth:
         r.raise_for_status()
         return r.json()
 
-    # ---------------- REFRESH TOKEN ----------------
     def refresh_token(self, account_data: dict):
         refresh_tok = account_data.get("refresh_token")
         if not refresh_tok:

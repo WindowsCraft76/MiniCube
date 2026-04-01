@@ -1,4 +1,6 @@
-﻿import os
+﻿# Main application, handling UI and user interactions.
+
+import os
 import json
 import urllib.request
 import tkinter as tk
@@ -13,10 +15,8 @@ from tkinter import ttk, messagebox
 from MicrosoftAuth import MicrosoftAuth
 from AccountManager import AccountManager
 from Config import CONTENT, INDEXES_DIR, GAME_DIR, ASSETS_DIR, SETTINGS_FILE, VERSIONS_DIR, LIBRARIES_DIR, OBJECTS_DIR, JAVA_DIR, PAGE_URL, VERSION_MANIFEST, center_window
-from UpdateSystem import get_info_version, get_remote_version, is_version_lower, get_update_page_url
+from VersionsManager import get_info_version, get_remote_version, is_version_lower, get_update_page_url, get_release_commit
 from DiscordRPC import DiscordRPC
-
-### Main application class for the Mini Cube.
 
 class MiniCubeApp:
     def __init__(self, root, rpc=None):
@@ -25,7 +25,6 @@ class MiniCubeApp:
         if self.rpc.app is None:
             self.rpc.app = self
 
-        # Variables Default values
         self.username_var = tk.StringVar(value="Steve")
         self.version_var = tk.StringVar()
         self.ram_var = tk.IntVar(value=2048)
@@ -42,28 +41,22 @@ class MiniCubeApp:
         self.is_offline_var = tk.BooleanVar(value=False)
         self.accounts_list = []
 
-        # Log window variables
         self.log_window = None
         self.log_text_win = None
         self.log_buffer = []
 
-        # Load saved settings
         self.load_settings()
 
-        # Start Discord RPC only if enabled in settings
         if self.discord_rpc_var.get():
             self.rpc.start_rpc()
 
         self.log("Loading interface...", "info")
-        # Principal window #
 
-        # Main
         self.root.title("Mini Cube")
         self.root.geometry("350x310")
         self.root.resizable(False, False)
         self.root.iconbitmap(f"{CONTENT}\\icon\\icon_32x32.ico")
 
-        # Menu bar
         self.toolbar = tk.Menu(root)
         menu = tk.Menu(self.toolbar, tearoff=0)
         menu.add_command(label="Show logs", command=self.toggle_logs_window)
@@ -77,8 +70,8 @@ class MiniCubeApp:
         help = tk.Menu(self.toolbar, tearoff=0)
         help.add_command(
             label="About",
-            command=lambda: messagebox.showinfo("About", f"Mini Cube\n\nCreate by WindowsCraft76\n\nVersion: {get_info_version()}\nCommit: {self._get_release_commit()}"))
-        help.add_command(label="Terms of Use", command=lambda: webbrowser.open(f"{PAGE_URL}/blob/main/TERMS_OF_USE.md"))
+            command=lambda: messagebox.showinfo("About", f"Mini Cube\n\nCreate by WindowsCraft76\n\nVersion: {get_info_version()}\nCommit: {get_release_commit()}"))
+        help.add_command(label="Terms of Service", command=lambda: webbrowser.open(f"{PAGE_URL}/blob/main/TERMS_OF_SERVICE.md"))
         help.add_command(label="Privacy Policy", command=lambda: webbrowser.open(f"{PAGE_URL}/blob/main/PRIVACY_POLICY.md"))
         help.add_command(label="Open page", command=lambda: webbrowser.open(PAGE_URL))
         self.toolbar.add_cascade(label="Help", menu=help)
@@ -87,7 +80,6 @@ class MiniCubeApp:
 
         self.UPDATE_LABEL = "New update available"
 
-        # UI
         self.account_frame = tk.Frame(root)
         self.account_frame.pack(pady=(5, 0))
 
@@ -121,7 +113,6 @@ class MiniCubeApp:
         self.launch_btn = tk.Button(root, text="Launch game", command=lambda: [ self.save_settings(), self.update_progress(0, 1, "Loading..."), style.configure("blue.Horizontal.TProgressbar", background='green'), self.launch_game()])
         self.launch_btn.pack(pady=(25, 5))
 
-        # Styled progress bar
         style = ttk.Style()
         style.theme_use('classic')
         style.configure("blue.Horizontal.TProgressbar", troughcolor='grey', background='green', thickness=20)
@@ -135,11 +126,9 @@ class MiniCubeApp:
         self.check_version_mismatch_async()
         self.refresh_version_list()
 
-    # Settings window #
     def toggle_settings_window(self):
         if getattr(self, "settings_window", None) and self.settings_window.winfo_exists():
             try:
-                # Re-sync UI values from settings file before showing
                 self._sync_settings_from_file()
                 self.settings_window.deiconify()
                 self.settings_window.lift()
@@ -148,17 +137,14 @@ class MiniCubeApp:
                 pass
             return
 
-        # Sync settings from file before opening
         self._sync_settings_from_file()
 
-        # Main
         self.settings_window = tk.Toplevel(self.root)
         self.settings_window.title("Settings")
         self.settings_window.resizable(False, False)
         self.settings_window.iconbitmap(f"{CONTENT}\\icon\\icon_32x32.ico")
         center_window(self.settings_window, 350, 180)
 
-        # UI
         tk.Label(self.settings_window, text="RAM Memory (MB):").pack(pady=2)
 
         self._temp_ram_var = tk.IntVar(value=self.ram_var.get())
@@ -206,7 +192,6 @@ class MiniCubeApp:
         
         self.settings_window.protocol("WM_DELETE_WINDOW", _on_close)
 
-    # Logs window #
     def log(self, msg, kind="info"):
         timestamped = f"[{time.strftime('%H:%M:%S')}] {msg}"
         self.log_buffer.append((timestamped, kind))
@@ -257,7 +242,6 @@ class MiniCubeApp:
         self.log_window = None
         self.log_text_win = None
 
-    # Account window #
     def toggle_accounts_manager_window(self):
         if getattr(self, "acc_win", None) and self.acc_win.winfo_exists():
             try:
@@ -268,14 +252,12 @@ class MiniCubeApp:
                 pass
             return
         
-        # Main
         self.acc_win = tk.Toplevel(self.root)
         self.acc_win.title("Accounts Manager")
         self.acc_win.iconbitmap(f"{CONTENT}\\icon\\icon_32x32.ico")
         self.acc_win.resizable(False, False)
         center_window(self.acc_win, 300, 250)
 
-        # UI
         self.acc_listbox = tk.Listbox(self.acc_win)
         self.acc_listbox.pack(fill=tk.BOTH, expand=True, padx=10, pady=1)
 
@@ -296,7 +278,6 @@ class MiniCubeApp:
             pass
         self.acc_win = None
 
-    # ------------------ Accounts management ------------------
     def add_microsoft_account(self):
         ms_auth = MicrosoftAuth(app=self)
         account_data = ms_auth.login()
@@ -352,35 +333,6 @@ class MiniCubeApp:
         self.refresh_account_listbox()
         self.refresh_accounts_ui()
 
-    # ------------------ Git commit ------------------
-    def _get_release_commit(self):
-        version = get_info_version()
-
-        if "not found" in version.lower() or "error" in version.lower():
-            return "Not found"
-
-        try:
-            api_url = f"https://api.github.com/repos/WindowsCraft76/mini-cube/git/ref/tags/{version}"
-            req = urllib.request.Request(api_url, headers={"User-Agent": "MiniCube"})
-            with urllib.request.urlopen(req, timeout=5) as response:
-                data = json.loads(response.read().decode())
-
-            sha = data.get("object", {}).get("sha", "")
-
-            # If the tag is annotated, resolve the tag object to get the commit sha
-            if data.get("object", {}).get("type") == "tag":
-                tag_url = data["object"]["url"]
-                req2 = urllib.request.Request(tag_url, headers={"User-Agent": "MiniCube"})
-                with urllib.request.urlopen(req2, timeout=5) as response2:
-                    tag_data = json.loads(response2.read().decode())
-                sha = tag_data.get("object", {}).get("sha", sha)
-
-            return sha[:7] if sha else "Not found"
-
-        except Exception:
-            return "Not found"
-
-    # ------------------ Settings Save/Load ------------------
     def load_settings(self):
 
         self.log("Loading settings...", "info")
@@ -392,7 +344,6 @@ class MiniCubeApp:
             with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
 
-            # Default values if keys are missing
             self.username_var.set(data.get("username", "Steve"))
             self.ram_var.set(data.get("ram", 2048))
             self.show_snapshots_var.set(data.get("show_snapshots", False))
@@ -419,7 +370,6 @@ class MiniCubeApp:
             self.log(f"Error saving settings: {e}", "error")
 
     def reset_settings(self):
-    # Set default values
         self.username_var.set("Steve")
         self.ram_var.set(2048)
         self.show_snapshots_var.set(False)
@@ -448,17 +398,14 @@ class MiniCubeApp:
             new_show_old = data.get("show_old_versions", False)
             new_discord_rpc = data.get("discord_rpc", True)
 
-            # Apply show_snapshots only if value changed to avoid unnecessary refresh
             if self.show_snapshots_var.get() != new_show_snapshots:
                 self.show_snapshots_var.set(new_show_snapshots)
                 self.refresh_version_list()
 
-            # Apply show_old_versions only if value changed
             if self.show_old_var.get() != new_show_old:
                 self.show_old_var.set(new_show_old)
                 self.refresh_version_list()
 
-            # Apply Discord RPC only if the value changed
             if self.discord_rpc_var.get() != new_discord_rpc:
                 self.discord_rpc_var.set(new_discord_rpc)
                 self._apply_discord_rpc()
@@ -468,7 +415,6 @@ class MiniCubeApp:
             self.log(f"Error syncing settings from file: {e}", "error")
 
     def _apply_settings_from_temp(self):
-        """Apply temp variables from Settings window to real variables, then trigger side effects."""
         self.ram_var.set(self._temp_ram_var.get())
 
         old_changed = self.show_old_var.get() != self._temp_show_old_var.get()
@@ -492,7 +438,6 @@ class MiniCubeApp:
     def _toggle_discord_rpc(self):
         self._apply_discord_rpc()
 
-    # ------------------ Toggle account mode ------------------
     def toggle_account_mode(self):
         has_official = len(self.account_manager.get_all_accounts()) > 0
 
@@ -517,7 +462,6 @@ class MiniCubeApp:
             self.account_menu.pack(pady=(0, 0))
             self.log("Mode change: Online", "info")
 
-    # ------------------ Version mismatch check ------------------
     def check_version_mismatch(self):
 
         self.log("Checking for updates...", "info")
@@ -589,7 +533,6 @@ class MiniCubeApp:
             except Exception:
                 pass
 
-    # ------------------ Versions Minecraft ------------------
     def refresh_version_list(self):
 
         self.log("Fetching version manifest...", "info")
@@ -621,13 +564,11 @@ class MiniCubeApp:
         if version_ids:
             self.version_var.set(version_ids[0])
 
-    # ------------------ Open folder ------------------
     def open_folder(self):
         folder_path = GAME_DIR
         if os.name == "nt":
             os.startfile(folder_path)
 
-    # ------------------ Get required Java version ------------------
     def get_required_java_version(self, version_data):
 
         java_info = version_data.get("javaVersion")
@@ -635,7 +576,6 @@ class MiniCubeApp:
             return 8
         return java_info.get("majorVersion", 8)
 
-    # ------------------ UI lock/unlock ------------------
     def set_ui_state(self, enabled: bool):
         self._ui_locked = not enabled
         normal_state = "normal" if enabled else "disabled"
@@ -656,7 +596,6 @@ class MiniCubeApp:
         if hasattr(self, "old_check") and self.old_check and self.old_check.winfo_exists():
             self.old_check.config(state=normal_state)
 
-    # ------------------ Progress ------------------
     def update_progress(self, done, total, text=""):
         self.progress_var.set(done / total if total > 0 else 0)
         if text:
@@ -676,7 +615,6 @@ class MiniCubeApp:
             return f"{m}m{s:02d}s"
         return f"{secs}s"
 
-    # ------------------ Prepare the version ------------------
     def prepare_version(self, version_id):
         version_info = next(v for v in self.version_manifest["versions"] if v["id"] == version_id)
         version_dir = VERSIONS_DIR / version_id
@@ -763,7 +701,6 @@ class MiniCubeApp:
         self.update_progress(total, total, "Download finished!")
         return version_data, version_jar_path
 
-    # ------------------ Ensure Java installed ------------------
     def ensure_java_installed(self, major_version: int):
 
         for item in JAVA_DIR.iterdir():
@@ -794,7 +731,6 @@ class MiniCubeApp:
 
         if not packages:
             raise Exception(f"No Java package found for Java {major_version}", "error")
-            self.log(f"No Java package found for Java {major_version}", "error")
 
         pkg = packages[0]
         download_url = pkg["download_url"]
@@ -823,9 +759,7 @@ class MiniCubeApp:
                 return javaw
 
         raise Exception(f"No Java package found for Java {major_version}")
-        raise Exception(f"javaw.exe for Java {major_version} not found")
 
-    # ------------------ Extract natives ------------------
     def extract_natives(self, version_data):
 
         version_id = version_data["id"]
@@ -880,7 +814,6 @@ class MiniCubeApp:
 
         return natives_dir
 
-    # ------------------ Launch ------------------
     def launch_game(self):
         if self.download_thread and self.download_thread.is_alive():
             self.cancel_download = True
@@ -911,7 +844,6 @@ class MiniCubeApp:
         version_id = self.version_var.get()
         ram = self.ram_var.get()
 
-        # Lock UI immediately when the game starts launching
         self.root.after(0, lambda: self.set_ui_state(False))
 
         if not self.is_offline_var.get():
@@ -965,7 +897,6 @@ class MiniCubeApp:
             account_name = self.selected_account_var.get()
             account_data = self.account_manager.get_account_by_name(account_name)
 
-            # Refresh the Microsoft/Minecraft token before launching
             auth = MicrosoftAuth(app=self)
             refreshed = auth.refresh_token(account_data)
             if refreshed:
