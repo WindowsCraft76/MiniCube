@@ -1,10 +1,10 @@
 # <img src="https://github.com/WindowsCraft76/MiniCube/blob/Beta/Content/logo/logo_64x64.png?raw=true" alt="Icon" width="25" height="25"> MiniCube
 
-[![Release](https://img.shields.io/github/v/release/WindowsCraft76/MiniCube)](https://github.com/WindowsCraft76/MiniCube/releases)
-[![Downloads)](https://img.shields.io/github/downloads/WindowsCraft76/MiniCube/total)](https://github.com/WindowsCraft76/MiniCube/releases)
-[![License](https://img.shields.io/github/license/WindowsCraft76/MiniCube)](https://github.com/WindowsCraft76/MiniCube/blob/main/LICENSE)
-[![Python](https://img.shields.io/badge/python-3.14-blue)](https://www.python.org/downloads/release/python-3140/)
-[![ko-fi](https://img.shields.io/badge/Support_me_on_Ko--fi-FF5A16?logo=ko-fi&logoColor=white)](https://ko-fi.com/X8X81VIGPB)
+[![Release](https://img.shields.io/github/v/release/WindowsCraft76/MiniCube?style=for-the-badge)](https://github.com/WindowsCraft76/MiniCube/releases)
+[![Downloads)](https://img.shields.io/github/downloads/WindowsCraft76/MiniCube/total?style=for-the-badge)](https://github.com/WindowsCraft76/MiniCube/releases)
+[![License](https://img.shields.io/github/license/WindowsCraft76/MiniCube?style=for-the-badge)](https://github.com/WindowsCraft76/MiniCube/blob/main/LICENSE)
+[![Python](https://img.shields.io/badge/python-3.14-blue?style=for-the-badge)](https://www.python.org/downloads/release/python-3140/)
+[![ko-fi](https://img.shields.io/badge/Support_me_on_Ko--fi-FF5A16?logo=ko-fi&logoColor=white&style=for-the-badge)](https://ko-fi.com/X8X81VIGPB)
 
 *A lightweight and simple Minecraft launcher.*
 
