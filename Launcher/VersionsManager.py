@@ -1,13 +1,18 @@
-# Version management functions for checking updates and comparing versions.
-
 import subprocess
-import winreg
 import re
-import urllib
+import urllib.request
 import json
-from Config import PAGE_URL
+from Config import PAGE_URL, API_GITHUB_URL
+
+try:
+    import winreg
+except ImportError:
+    winreg = None
 
 def get_info_version():
+    if winreg is None:
+        return "No version found"
+
     reg_path = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\Mini Cube"
 
     try:
@@ -22,10 +27,7 @@ def get_info_version():
         return str(version)
 
     except FileNotFoundError:
-        try:
-            return "No version found"
-        except Exception as e:
-            return f"Error reading fallback version: {e}"
+        return "No version found"
 
     except Exception as e:
         return f"Registry error: {e}"
@@ -99,7 +101,7 @@ def get_release_commit():
         return "Not found"
 
     try:
-        api_url = f"https://api.github.com/repos/WindowsCraft76/mini-cube/git/ref/tags/{version}"
+        api_url = f"{API_GITHUB_URL}/repos/WindowsCraft76/MiniCube/git/ref/tags/{version}"
         req = urllib.request.Request(api_url, headers={"User-Agent": "MiniCube"})
         with urllib.request.urlopen(req, timeout=5) as response:
             data = json.loads(response.read().decode())

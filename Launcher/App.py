@@ -1,6 +1,4 @@
-﻿# Main application, handling UI and user interactions.
-
-import os
+﻿import os
 import json
 import urllib.request
 import tkinter as tk
@@ -14,11 +12,16 @@ from pathlib import Path
 from tkinter import ttk, messagebox
 from MicrosoftAuth import MicrosoftAuth
 from AccountManager import AccountManager
-from Config import CONTENT, INDEXES_DIR, GAME_DIR, ASSETS_DIR, SETTINGS_FILE, VERSIONS_DIR, LIBRARIES_DIR, OBJECTS_DIR, JAVA_DIR, PAGE_URL, VERSION_MANIFEST, center_window
+from Config import (
+    CONTENT, INDEXES_DIR, GAME_DIR, ASSETS_DIR, SETTINGS_FILE,
+    VERSIONS_DIR, LIBRARIES_DIR, OBJECTS_DIR, JAVA_DIR, PAGE_URL,
+    VERSION_MANIFEST_URL, RESSOURCE_MC_URL, API_AZUL_URL, NATIVES_DIR
+    )
 from VersionsManager import get_info_version, get_remote_version, is_version_lower, get_update_page_url, get_release_commit
 from DiscordRPC import DiscordRPC
+from SplashScreen import center_window
 
-class MiniCubeApp:
+class App:
     def __init__(self, root, rpc=None):
         self.root = root
         self.rpc = rpc if rpc else DiscordRPC(self)
@@ -55,7 +58,7 @@ class MiniCubeApp:
         self.root.title("Mini Cube")
         self.root.geometry("350x310")
         self.root.resizable(False, False)
-        self.root.iconbitmap(f"{CONTENT}\\icon\\icon_32x32.ico")
+        self.root.iconbitmap(str(CONTENT / "icon" / "icon_32x32.ico"))
 
         self.toolbar = tk.Menu(root)
         menu = tk.Menu(self.toolbar, tearoff=0)
@@ -142,7 +145,7 @@ class MiniCubeApp:
         self.settings_window = tk.Toplevel(self.root)
         self.settings_window.title("Settings")
         self.settings_window.resizable(False, False)
-        self.settings_window.iconbitmap(f"{CONTENT}\\icon\\icon_32x32.ico")
+        self.settings_window.iconbitmap(str(CONTENT / "icon" / "icon_32x32.ico"))
         center_window(self.settings_window, 350, 180)
 
         tk.Label(self.settings_window, text="RAM Memory (MB):").pack(pady=2)
@@ -213,7 +216,7 @@ class MiniCubeApp:
         else:
             self.log_window = tk.Toplevel(self.root)
             self.log_window.title("Logs")
-            self.log_window.iconbitmap(f"{CONTENT}\\icon\\icon_32x32.ico")
+            self.log_window.iconbitmap(str(CONTENT / "icon" / "icon_32x32.ico"))
             self.log_window.geometry("600x300")
             self.log_window.protocol("WM_DELETE_WINDOW", self._on_close_log_window)
 
@@ -254,7 +257,7 @@ class MiniCubeApp:
         
         self.acc_win = tk.Toplevel(self.root)
         self.acc_win.title("Accounts Manager")
-        self.acc_win.iconbitmap(f"{CONTENT}\\icon\\icon_32x32.ico")
+        self.acc_win.iconbitmap(str(CONTENT / "icon" / "icon_32x32.ico"))
         self.acc_win.resizable(False, False)
         center_window(self.acc_win, 300, 250)
 
@@ -486,7 +489,7 @@ class MiniCubeApp:
                 self.update_btn.pack_forget()
             except Exception:
                 pass
-                self.log(f"Launcher up to date ({local})", "success")
+            self.log(f"Launcher up to date ({local})", "success")
 
 
     def check_version_mismatch_async(self):
@@ -538,7 +541,7 @@ class MiniCubeApp:
         self.log("Fetching version manifest...", "info")
 
         try:
-            urllib.request.urlretrieve(VERSION_MANIFEST, VERSIONS_DIR / "version_manifest.json")
+            urllib.request.urlretrieve(VERSION_MANIFEST_URL, VERSIONS_DIR / "version_manifest.json")
             with open(VERSIONS_DIR / "version_manifest.json", "r", encoding="utf-8") as f:
                 self.version_manifest = json.load(f)
                 self.log("Version manifest fetched successfully!", "success")
@@ -668,7 +671,7 @@ class MiniCubeApp:
         for name, obj in objects.items():
             hash_val = obj["hash"]
             subdir = hash_val[:2]
-            url = f"https://resources.download.minecraft.net/{subdir}/{hash_val}"
+            url = f"{RESSOURCE_MC_URL}/{subdir}/{hash_val}"
             obj_path = OBJECTS_DIR / subdir / hash_val
             tasks.append(("asset", obj_path, url))
 
@@ -719,7 +722,7 @@ class MiniCubeApp:
         self.log(f"Downloading Java {major_version}...", "info")
 
         api_url = (
-            "https://api.azul.com/metadata/v1/zulu/packages/"
+            f"{API_AZUL_URL}/metadata/v1/zulu/packages/"
             f"?java_version={major_version}"
             "&os=windows"
             "&java_package_type=jre"
@@ -730,7 +733,7 @@ class MiniCubeApp:
             packages = json.load(resp)
 
         if not packages:
-            raise Exception(f"No Java package found for Java {major_version}", "error")
+            raise Exception(f"No Java package found for Java {major_version}")
 
         pkg = packages[0]
         download_url = pkg["download_url"]
@@ -763,9 +766,7 @@ class MiniCubeApp:
     def extract_natives(self, version_data):
 
         version_id = version_data["id"]
-
-        natives_dir = GAME_DIR / "natives" / version_id
-        natives_dir.mkdir(parents=True, exist_ok=True)
+        natives_dir = NATIVES_DIR / version_id
 
         system = platform.system().lower()
         if system.startswith("win"):
@@ -937,7 +938,11 @@ class MiniCubeApp:
 
         try:
             self.root.after(0, lambda: self.progress_label.config(text="Game running..."))
-            self.rpc.update_details(f"Playing Minecraft {version_id}")
+            self.rpc.update(
+                details=f"Playing Minecraft {version_id}",
+                small_image=f"https://mc-heads.net/avatar/{uuid}/32",
+                small_text=f"Playing offline as {active_user}" if self.is_offline_var.get() else f"Playing as {active_user}"
+            )
             game_process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             self.root.after(0, lambda: self.launch_btn.config(state="disabled", text="Ready!"))
         except Exception as e:
@@ -957,4 +962,4 @@ class MiniCubeApp:
         self.root.after(0, lambda: self.progress_label.config(text="Game closed"))
         self.root.after(0, lambda: style.configure("blue.Horizontal.TProgressbar", background='red'))
         self.log("=== Game finished ===", "info")
-        self.rpc.update_details("In the launcher")
+        self.rpc.update(details="In the launcher")

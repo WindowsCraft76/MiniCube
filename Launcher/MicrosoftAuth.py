@@ -1,5 +1,3 @@
-# Microsoft authentication class, handles the entire OAuth flow and token management for Microsoft accounts used in Minecraft authentication.
-
 import webbrowser
 import http.server
 import socketserver
@@ -8,7 +6,10 @@ import urllib.parse
 import time
 import requests
 from tkinter import messagebox
-from Config import CLIENT_ID, REDIRECT_URI, SCOPE
+from Config import (
+    CLIENT_ID, REDIRECT_URI, SCOPE, AUTH_URL,
+    TOKEN_URL, API_MCSERVICES_URL, XBOX_USER_AUTH_URL, XBOX_XSTS_URL
+    )
 
 class MicrosoftAuth:
     HTML_SUCCESS = """
@@ -50,7 +51,7 @@ class MicrosoftAuth:
             "response_mode": "query"
         }
 
-        auth_url = "https://login.live.com/oauth20_authorize.srf?" + urllib.parse.urlencode(params)
+        auth_url = f"{AUTH_URL}?" + urllib.parse.urlencode(params)
         webbrowser.open(auth_url)
 
         self._start_local_server()
@@ -96,9 +97,14 @@ class MicrosoftAuth:
 
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_GET(self):
-                query = urllib.parse.parse_qs(
-                    urllib.parse.urlparse(self.path).query
-                )
+                parsed = urllib.parse.urlparse(self.path)
+
+                if parsed.path != urllib.parse.urlparse(REDIRECT_URI).path:
+                    self.send_response(404)
+                    self.end_headers()
+                    return
+
+                query = urllib.parse.parse_qs(parsed.query)
 
                 self.send_response(200)
                 self.send_header("Content-type", "text/html; charset=utf-8")
@@ -128,12 +134,13 @@ class MicrosoftAuth:
         def run_server():
             socketserver.TCPServer.allow_reuse_address = True
             with socketserver.TCPServer(("localhost", 8080), Handler) as httpd:
-                httpd.handle_request()
+                while auth.auth_code is None and not auth.auth_failed:
+                    httpd.handle_request()
 
         threading.Thread(target=run_server, daemon=True).start()
 
     def _get_microsoft_token(self, code):
-        url = "https://login.live.com/oauth20_token.srf"
+        url = f"{TOKEN_URL}"
         data = {
             "client_id": CLIENT_ID,
             "code": code,
@@ -149,7 +156,7 @@ class MicrosoftAuth:
         return js["access_token"], js.get("refresh_token", "")
 
     def _get_xbox_live_token(self, ms_access):
-        url = "https://user.auth.xboxlive.com/user/authenticate"
+        url = f"{XBOX_USER_AUTH_URL}"
         payload = {
             "Properties": {
                 "AuthMethod": "RPS",
@@ -164,9 +171,8 @@ class MicrosoftAuth:
         r.raise_for_status()
         return r.json()["Token"]
 
-    # ---------------- XSTS ----------------
     def _get_xsts_token(self, xbl_token):
-        url = "https://xsts.auth.xboxlive.com/xsts/authorize"
+        url = f"{XBOX_XSTS_URL}"
         payload = {
             "Properties": {
                 "SandboxId": "RETAIL",
@@ -184,7 +190,7 @@ class MicrosoftAuth:
         return js["Token"], uhs
 
     def _get_minecraft_token(self, xsts_token, uhs):
-        url = "https://api.minecraftservices.com/authentication/login_with_xbox"
+        url = f"{API_MCSERVICES_URL}/authentication/login_with_xbox"
         payload = {
             "identityToken": f"XBL3.0 x={uhs};{xsts_token}"
         }
@@ -199,7 +205,7 @@ class MicrosoftAuth:
         }
 
         r = requests.get(
-            "https://api.minecraftservices.com/minecraft/profile",
+            f"{API_MCSERVICES_URL}/minecraft/profile",
             headers=headers
         )
         r.raise_for_status()
@@ -221,7 +227,7 @@ class MicrosoftAuth:
                         lambda: self.app.progress_label.config(text=f"Refreshing token...")
                     )
 
-            url = "https://login.live.com/oauth20_token.srf"
+            url = f"{TOKEN_URL}"
             data = {
                 "client_id": CLIENT_ID,
                 "grant_type": "refresh_token",

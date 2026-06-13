@@ -5,8 +5,13 @@ logs/
 
 # Ignore the Python execution directory
 python*/
+__pycache__/
 
 # Ignore application files/folders
 settings.json
-__pycache__/
+accounts.json
+.salt
+
 Data/
+Meta/
+Logs/

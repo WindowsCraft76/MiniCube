@@ -1,8 +1,6 @@
-# Main entry point for the application
-
 import tkinter as tk
 from tkinter import messagebox
-from MiniCubeApp import MiniCubeApp
+from App import App
 from SplashScreen import SplashScreen
 from DiscordRPC import DiscordRPC
 
@@ -16,7 +14,7 @@ def main():
 
     def start_launcher():
         try:
-            app = MiniCubeApp(root, rpc=rpc)
+            app = App(root, rpc=rpc)
 
             root.update()
             root.after(500, splash.root.destroy)

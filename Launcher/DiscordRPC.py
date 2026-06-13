@@ -1,8 +1,6 @@
-# Discord rpc class, used to manage the discord rpc presence of the app
-
 import time
 from pypresence import Presence
-from Config import CLIENT_ID_RPC
+from Config import CLIENT_ID_RPC, PAGE_URL
 from VersionsManager import get_info_version
 
 class DiscordRPC:
@@ -11,17 +9,24 @@ class DiscordRPC:
         self.rpc = None
         self.start_time = None
 
-    def _update(self, details: str):
+    def _update(self, details: str, small_image: str = None, small_text: str = None):
         if not self.rpc:
             return
         try:
-            self.rpc.update(
-                large_image="logo_1024x1024",
-                large_text=f"Mini Cube - {get_info_version()}",
-                details=details,
-                start=self.start_time,
-                buttons=[{"label": "Download Mini Cube", "url": "https://github.com/WindowsCraft76/mini-cube/releases"}]
-            )
+            payload = {
+                "large_image": "logo_1024x1024",
+                "large_text": f"Mini Cube - {get_info_version()}",
+                "details": details,
+                "start": self.start_time,
+                "buttons": [{"label": "Download Mini Cube", "url": f"{PAGE_URL}/releases"}]
+            }
+
+            if small_image:
+                payload["small_image"] = small_image
+            if small_text:
+                payload["small_text"] = small_text
+
+            self.rpc.update(**payload)
         except Exception:
             pass
 
@@ -40,8 +45,10 @@ class DiscordRPC:
                 self.app.log(f"Failed to connect to Discord RPC!", "error")
             self.rpc = None
 
-    def update_details(self, details: str):
-        self._update(details=details)
+    def update(self, details: str, small_image: str = None, small_text: str = None):
+        self._update(details=details, small_image=small_image, small_text=small_text)
+        if self.app:
+            self.app.log("Updated Discord RPC presence", "info")
 
     def is_running(self):
         return self.rpc is not None
