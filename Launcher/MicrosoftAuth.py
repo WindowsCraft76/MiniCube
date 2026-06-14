@@ -224,7 +224,7 @@ class MicrosoftAuth:
                 if self.app:
                     self.app.root.after(
                         0,
-                        lambda: self.app.progress_label.config(text=f"Refreshing token...")
+                        lambda: self.app.update_progress("Refreshing token...")
                     )
 
             url = f"{TOKEN_URL}"

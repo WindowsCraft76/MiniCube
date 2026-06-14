@@ -55,8 +55,10 @@ class App:
 
         self.log("Loading interface...", "info")
 
+        style = ttk.Style()
+        style.theme_use('default')
         self.root.title("MiniCube")
-        self.root.geometry("350x310")
+        self.root.geometry("330x270")
         self.root.resizable(False, False)
         self.root.iconbitmap(str(CONTENT / "icon" / "icon_32x32.ico"))
 
@@ -117,17 +119,11 @@ class App:
         self.snapshot_check = tk.Checkbutton(root, text="Show snapshots", variable=self.show_snapshots_var, command=self.refresh_version_list)
         self.snapshot_check.pack(pady=(3, 0))
 
-        self.launch_btn = tk.Button(root, text="Launch game", command=lambda: [ self.save_settings(), self.update_progress(0, 1, "Loading..."), style.configure("blue.Horizontal.TProgressbar", background='green'), self.launch_game()])
-        self.launch_btn.pack(pady=(25, 5))
+        self.launch_btn = tk.Button(root, text="Launch game", command=lambda: [ self.save_settings(), self.update_progress("Loading..."), self.launch_game()])
+        self.launch_btn.pack(pady=(20, 0))
 
-        style = ttk.Style()
-        style.theme_use('default')
-        style.configure("blue.Horizontal.TProgressbar", troughcolor='grey', background='green', thickness=20)
-        self.progress_var = tk.DoubleVar(value=0.0)
-        self.progress = ttk.Progressbar(root, style="blue.Horizontal.TProgressbar", variable=self.progress_var, maximum=1.0, length=320)
-        self.progress.pack(pady=5)
         self.progress_label = tk.Label(root, text="Waiting...")
-        self.progress_label.pack(pady=(5, 10))
+        self.progress_label.pack(pady=(10, 0))
 
         self.version_manifest = {}
         self.check_version_mismatch_async()
@@ -603,11 +599,9 @@ class App:
         if hasattr(self, "old_check") and self.old_check and self.old_check.winfo_exists():
             self.old_check.config(state=normal_state)
 
-    def update_progress(self, done, total, text=""):
-        self.progress_var.set(done / total if total > 0 else 0)
+    def update_progress(self, text=""):
         if text:
             self.progress_label.config(text=text)
-        self.root.update_idletasks()
 
     def format_duration(self, seconds: float) -> str:
         secs = int(max(0, round(seconds)))
@@ -686,8 +680,7 @@ class App:
         for kind, path, url in tasks:
             if self.cancel_download:
                 self.log("Download canceled!", "info")
-                self.update_progress(done, total, "Download canceled")
-                style.configure("blue.Horizontal.TProgressbar", background='orange')
+                self.update_progress("Download canceled")
                 return None, None
             path.parent.mkdir(parents=True, exist_ok=True)
             if path.exists():
@@ -703,9 +696,9 @@ class App:
             speed = done / elapsed if elapsed > 0 else 0
             remaining = (total - done) / speed if speed > 0 else 0
             remaining_str = self.format_duration(remaining)
-            self.update_progress(done, total, f"{done}/{total} files - remaining {remaining_str}")
+            self.update_progress(f"{done}/{total} files - remaining {remaining_str}")
 
-        self.update_progress(total, total, "Download finished!")
+        self.update_progress("Download finished!")
         return version_data, version_jar_path
 
     def ensure_java_installed(self, major_version: int):
@@ -724,6 +717,7 @@ class App:
                 return javaw
 
         self.log(f"Downloading Java {major_version}...", "info")
+        self.update_progress("Downloading Java...")
 
         api_url = (
             f"{API_AZUL_URL}/metadata/v1/zulu/packages/"
@@ -744,7 +738,6 @@ class App:
         zip_name = Path(download_url).name
         zip_path = JAVA_DIR / zip_name
 
-        self.root.after(0, lambda: self.progress_label.config(text=f"Downloading Java..."))
         urllib.request.urlretrieve(download_url, zip_path)
 
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
@@ -783,8 +776,8 @@ class App:
             raise Exception(f"Unsupported OS: {system}")
 
         self.log(f"Extracting natives for {version_id}...", "info")
+        self.update_progress("Extracting natives...")
 
-        self.root.after(0, lambda: self.progress_label.config(text=f"Extracting natives..."))
         for lib in version_data.get("libraries", []):
             natives = lib.get("natives")
             downloads = lib.get("downloads")
@@ -823,7 +816,7 @@ class App:
         if self.download_thread and self.download_thread.is_alive():
             self.cancel_download = True
             self.log("Canceling download...", "warn")
-            self.progress_label.config(text="Canceling download...")
+            self.update_progress("Canceling download...")
             return
 
         self.cancel_download = False
@@ -888,7 +881,6 @@ class App:
 
         cp_str = os.pathsep.join(classpath)
         java_major = self.get_required_java_version(version_data)
-        self.root.after(0, lambda: self.progress_label.config(text=f"Download Java..."))
         java_path = self.ensure_java_installed(java_major)
         main_class = version_data.get("mainClass", "net.minecraft.client.main.Main")
         natives_dir = self.extract_natives(version_data)
@@ -940,7 +932,7 @@ class App:
         self.log(f"[Command] {' '.join(safe_args)}", "info")
 
         try:
-            self.root.after(0, lambda: self.progress_label.config(text="Game running..."))
+            self.update_progress("Game running...")
             self.rpc.update(
                 details=f"Playing Minecraft {version_id}",
                 small_image=f"https://mc-heads.net/avatar/{uuid}/32",
@@ -962,7 +954,6 @@ class App:
 
         self.root.after(0, lambda: self.launch_btn.config(text="Launch game"))
         self.root.after(0, lambda: self.set_ui_state(True))
-        self.root.after(0, lambda: self.progress_label.config(text="Game closed"))
-        self.root.after(0, lambda: style.configure("blue.Horizontal.TProgressbar", background='red'))
+        self.update_progress("Game closed")
         self.log("=== Game finished ===", "info")
         self.rpc.update(details="In the launcher")
