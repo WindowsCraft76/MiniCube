@@ -17,7 +17,7 @@ from Config import (
     VERSIONS_DIR, LIBRARIES_DIR, OBJECTS_DIR, JAVA_DIR, PAGE_URL,
     VERSION_MANIFEST_URL, RESSOURCE_MC_URL, API_AZUL_URL, NATIVES_DIR
     )
-from VersionsManager import get_info_version, get_remote_version, is_version_lower, get_update_page_url, get_release_commit
+from VersionsManager import get_info_version, get_remote_version, is_version_lower, get_update_page_url
 from DiscordRPC import DiscordRPC
 from SplashScreen import center_window
 
@@ -85,7 +85,7 @@ class App:
             command=lambda:
             messagebox.showinfo(
             "About",
-            f"MiniCube\n\nCreated by WindowsCraft76\n\nVersion: {get_info_version()}\nCommit: {get_release_commit()}\n\nThis is an open-source project under the MIT license",
+            f"MiniCube\nCreated by WindowsCraft76\n\nVersion: {get_info_version()}\n\nThis is an open-source project under the MIT license.\nMiniCube is not affiliated with, endorsed by, or supported by Mojang Studios or Microsoft.",
         ))
         help.add_command(label="Terms of Service", command=lambda: webbrowser.open(f"{PAGE_URL}/blob/main/TERMS_OF_SERVICE.md"))
         help.add_command(label="Privacy Policy", command=lambda: webbrowser.open(f"{PAGE_URL}/blob/main/PRIVACY_POLICY.md"))
