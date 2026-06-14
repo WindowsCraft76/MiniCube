@@ -45,10 +45,18 @@ Support for other operating systems may come in the future.
 
 ## 🛠️ Development Setup
 
+### 📦 Dependencies
 If you want to modify or contribute to the project, install the required dependencies:
 
 ```
 pip install -r requirements.txt
+```
+
+### 🐛 Debug Mode
+You can launch the application in debug mode by adding the `--debug` argument at the end of the launch command. For example:
+
+```
+python.exe Main.py --debug
 ```
 
 ---

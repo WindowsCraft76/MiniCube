@@ -21,9 +21,20 @@ from VersionsManager import get_info_version, get_remote_version, is_version_low
 from DiscordRPC import DiscordRPC
 from SplashScreen import center_window
 
+_print_lock = threading.Lock()
+
 class App:
-    def __init__(self, root, rpc=None):
+    def __init__(self, root, rpc=None, debug=None):
         self.root = root
+        self.debug = debug
+
+        self.log_window = None
+        self.log_text_win = None
+        self.log_buffer = []
+
+        if debug:
+            self.log("Debug mode enabled!", "debug")
+
         self.rpc = rpc if rpc else DiscordRPC(self)
         if self.rpc.app is None:
             self.rpc.app = self
@@ -43,10 +54,6 @@ class App:
         self.selected_account_var = tk.StringVar()
         self.is_offline_var = tk.BooleanVar(value=False)
         self.accounts_list = []
-
-        self.log_window = None
-        self.log_text_win = None
-        self.log_buffer = []
 
         self.load_settings()
 
@@ -69,7 +76,7 @@ class App:
         menu.add_command(label="Settings", command=self.toggle_settings_window)
         menu.add_command(label="Open folder", command=self.open_folder)
         menu.add_separator()
-        menu.add_command(label="Exit", command=lambda: [self.save_settings(), self.rpc.stop_rpc(), root.update(), root.destroy()])
+        menu.add_command(label="Exit", command=lambda: [root.destroy()])
         self.toolbar.add_cascade(label="Menu", menu=menu)
 
         help = tk.Menu(self.toolbar, tearoff=0)
@@ -195,18 +202,21 @@ class App:
         
         self.settings_window.protocol("WM_DELETE_WINDOW", _on_close)
 
-    def log(self, msg, kind="info"):
-        timestamped = f"[{time.strftime('%H:%M:%S')}] {msg}"
-        self.log_buffer.append((timestamped, kind))
-        self.root.after(0, lambda: self._append_log_to_window(timestamped + "\n", kind))
-
     def _append_log_to_window(self, msg, kind="info"):
         if self.log_text_win:
             try:
-                self.log_text_win.insert(tk.END, msg + "", kind)
+                self.log_text_win.insert(tk.END, msg + "\n", kind)
                 self.log_text_win.see(tk.END)
             except Exception:
                 pass
+
+    def log(self, msg, kind="info"):
+        timestamped = f"[{time.strftime('%H:%M:%S')}] {msg}"
+        if self.debug:
+            with _print_lock:
+                print(f"[{kind.upper()}] {timestamped}")
+        self.log_buffer.append((timestamped, kind))
+        self.root.after(0, lambda: self._append_log_to_window(timestamped, kind))
 
     def toggle_logs_window(self):
         if self.log_window and self.log_window.winfo_exists():
@@ -228,6 +238,7 @@ class App:
             self.log_text_win.tag_config("warn", foreground="orange")
             self.log_text_win.tag_config("error", foreground="red")
             self.log_text_win.tag_config("game", foreground="cyan")
+            self.log_text_win.tag_config("debug", foreground="purple")
 
             for line, kind in self.log_buffer:
                 try:
