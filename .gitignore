@@ -15,3 +15,6 @@ accounts.json
 Data/
 Meta/
 Logs/
+
+# Ignore Visual Studio Code files/folders
+.vscode/

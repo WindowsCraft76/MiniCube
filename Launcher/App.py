@@ -117,7 +117,7 @@ class App:
         self.launch_btn.pack(pady=(25, 5))
 
         style = ttk.Style()
-        style.theme_use('classic')
+        style.theme_use('default')
         style.configure("blue.Horizontal.TProgressbar", troughcolor='grey', background='green', thickness=20)
         self.progress_var = tk.DoubleVar(value=0.0)
         self.progress = ttk.Progressbar(root, style="blue.Horizontal.TProgressbar", variable=self.progress_var, maximum=1.0, length=320)
@@ -449,14 +449,14 @@ class App:
 
         if self.is_offline_var.get():
             if not has_official:
+                self.is_offline_var.set(False)
+                self.toggle_account_mode()
                 messagebox.showwarning(
                     "Warning",
                     "Connect at least one Microsoft account to unlock Offline mode."
                 )
-                self.is_offline_var.set(False)
-                self.toggle_account_mode()
                 return
-
+            
             self.offline_label.pack(pady=(0, 2))
             self.offline_entry.pack(pady=(0, 0))
             self.log("Mode change: Offline", "info")
@@ -841,12 +841,6 @@ class App:
         return sanitized
 
     def _launch_game_thread(self):
-        username = self.username_var.get()
-        version_id = self.version_var.get()
-        ram = self.ram_var.get()
-
-        self.root.after(0, lambda: self.set_ui_state(False))
-
         if not self.is_offline_var.get():
             account_name = self.selected_account_var.get()
             account_data = self.account_manager.get_account_by_name(account_name)
@@ -857,8 +851,13 @@ class App:
                     "Please select an account or enable offline mode."
                 ))
                 self.root.after(0, lambda: self.launch_btn.config(text="Launch game"))
-                self.root.after(0, lambda: self.set_ui_state(True))
                 return
+
+        username = self.username_var.get()
+        version_id = self.version_var.get()
+        ram = self.ram_var.get()
+
+        self.root.after(0, lambda: self.set_ui_state(False))
 
         try:
             version_data, version_jar_path = self.prepare_version(version_id)
