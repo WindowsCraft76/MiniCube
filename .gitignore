@@ -8,6 +8,8 @@ python*/
 __pycache__/
 
 # Ignore application files/folders
+.MiniCube/
+
 settings.json
 accounts.json
 .salt

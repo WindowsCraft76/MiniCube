@@ -1,10 +1,12 @@
+import os
 from pathlib import Path
 
-BASE_DIR      = Path(__file__).resolve().parent.parent
+CONTENT       = Path(__file__).resolve().parent.parent / "Content"
+
+BASE_DIR      = Path(os.path.expandvars(r"%appdata%")) / ".MiniCube"
 META_DIR      = BASE_DIR / "Meta"
 GAME_DIR      = BASE_DIR / "GameFile"
 DATA_DIR      = BASE_DIR / "Data"
-CONTENT       = BASE_DIR / "Content"
 LOGS_DIR      = BASE_DIR / "Logs"
 
 VERSIONS_DIR  = META_DIR / "versions"
