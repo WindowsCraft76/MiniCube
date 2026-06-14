@@ -55,7 +55,7 @@ class App:
 
         self.log("Loading interface...", "info")
 
-        self.root.title("Mini Cube")
+        self.root.title("MiniCube")
         self.root.geometry("350x310")
         self.root.resizable(False, False)
         self.root.iconbitmap(str(CONTENT / "icon" / "icon_32x32.ico"))
@@ -73,7 +73,11 @@ class App:
         help = tk.Menu(self.toolbar, tearoff=0)
         help.add_command(
             label="About",
-            command=lambda: messagebox.showinfo("About", f"Mini Cube\n\nCreate by WindowsCraft76\n\nVersion: {get_info_version()}\nCommit: {get_release_commit()}"))
+            command=lambda:
+            messagebox.showinfo(
+            "About",
+            f"MiniCube\n\nCreated by WindowsCraft76\n\nVersion: {get_info_version()}\nCommit: {get_release_commit()}\n\nThis is an open-source project under the MIT license",
+        ))
         help.add_command(label="Terms of Service", command=lambda: webbrowser.open(f"{PAGE_URL}/blob/main/TERMS_OF_SERVICE.md"))
         help.add_command(label="Privacy Policy", command=lambda: webbrowser.open(f"{PAGE_URL}/blob/main/PRIVACY_POLICY.md"))
         help.add_command(label="Open page", command=lambda: webbrowser.open(PAGE_URL))

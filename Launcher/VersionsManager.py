@@ -13,7 +13,7 @@ def get_info_version():
     if winreg is None:
         return "No version found"
 
-    reg_path = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\Mini Cube"
+    reg_path = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\MiniCube"
 
     try:
         try:

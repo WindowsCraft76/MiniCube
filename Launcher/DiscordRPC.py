@@ -15,10 +15,10 @@ class DiscordRPC:
         try:
             payload = {
                 "large_image": "logo_1024x1024",
-                "large_text": f"Mini Cube - {get_info_version()}",
+                "large_text": f"MiniCube - {get_info_version()}",
                 "details": details,
                 "start": self.start_time,
-                "buttons": [{"label": "Download Mini Cube", "url": f"{PAGE_URL}/releases"}]
+                "buttons": [{"label": "Download MiniCube", "url": f"{PAGE_URL}/releases"}]
             }
 
             if small_image:
