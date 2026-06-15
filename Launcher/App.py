@@ -507,11 +507,13 @@ class App:
         threading.Thread(target=self._check_version_thread, daemon=True).start()
 
     def _check_version_thread(self):
+        if self.debug:
+            return
         try:
             self.check_version_mismatch()
         except Exception as e:
             try:
-                self.log(f"Erreur checking for updates!", "error")
+                self.log(f"Erreur checking for updates! ({e})", "error")
             except Exception:
                 pass
 
