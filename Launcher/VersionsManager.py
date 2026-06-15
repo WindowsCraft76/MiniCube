@@ -1,8 +1,6 @@
 import subprocess
 import re
-import urllib.request
-import json
-from Config import PAGE_URL, API_GITHUB_URL
+from Config import PAGE_URL
 
 try:
     import winreg
