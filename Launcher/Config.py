@@ -46,3 +46,5 @@ API_GITHUB_URL       = "https://api.github.com"
 VERSION_MANIFEST_URL = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json"
 RESSOURCE_MC_URL     = "https://resources.download.minecraft.net"
 PAGE_URL             = "https://github.com/WindowsCraft76/MiniCube"
+
+copyright = "Copyright (c) 2026 WindowsCraft76"

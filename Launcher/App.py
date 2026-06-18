@@ -15,7 +15,7 @@ from AccountManager import AccountManager
 from Config import (
     CONTENT, INDEXES_DIR, GAME_DIR, ASSETS_DIR, SETTINGS_FILE,
     VERSIONS_DIR, LIBRARIES_DIR, OBJECTS_DIR, JAVA_DIR, PAGE_URL,
-    VERSION_MANIFEST_URL, RESSOURCE_MC_URL, API_AZUL_URL, NATIVES_DIR
+    VERSION_MANIFEST_URL, RESSOURCE_MC_URL, API_AZUL_URL, NATIVES_DIR, copyright
     )
 from VersionsManager import get_info_version, get_remote_version, is_version_lower, get_update_page_url
 from DiscordRPC import DiscordRPC
@@ -67,7 +67,7 @@ class App:
         self.root.title("MiniCube")
         self.root.geometry("330x270")
         self.root.resizable(False, False)
-        self.root.iconbitmap(str(CONTENT / "icon" / "icon_32x32.ico"))
+        self.root.iconbitmap(str(CONTENT / "icon" / "icon_64x64.ico"))
 
         self.toolbar = tk.Menu(root)
         menu = tk.Menu(self.toolbar, tearoff=0)
@@ -85,7 +85,7 @@ class App:
             command=lambda:
             messagebox.showinfo(
             "About",
-            f"MiniCube\nCreated by WindowsCraft76\n\nVersion: {get_info_version()}\n\nThis is an open-source project under the MIT license.\nMiniCube is not affiliated with, endorsed by, or supported by Mojang Studios or Microsoft.",
+            f"MiniCube\nCreated by WindowsCraft76\n\nVersion: {get_info_version()}\n\nThis is an open-source project under the MIT license.\nMiniCube is not affiliated with, endorsed by, or supported by Mojang Studios or Microsoft.\n\n{copyright}",
         ))
         help.add_command(label="Terms of Service", command=lambda: webbrowser.open(f"{PAGE_URL}/blob/main/TERMS_OF_SERVICE.md"))
         help.add_command(label="Privacy Policy", command=lambda: webbrowser.open(f"{PAGE_URL}/blob/main/PRIVACY_POLICY.md"))
@@ -152,7 +152,7 @@ class App:
         self.settings_window = tk.Toplevel(self.root)
         self.settings_window.title("Settings")
         self.settings_window.resizable(False, False)
-        self.settings_window.iconbitmap(str(CONTENT / "icon" / "icon_32x32.ico"))
+        self.settings_window.iconbitmap(str(CONTENT / "icon" / "icon_64x64.ico"))
         center_window(self.settings_window, 350, 180)
 
         tk.Label(self.settings_window, text="RAM Memory (MB):").pack(pady=2)
@@ -226,7 +226,7 @@ class App:
         else:
             self.log_window = tk.Toplevel(self.root)
             self.log_window.title("Logs")
-            self.log_window.iconbitmap(str(CONTENT / "icon" / "icon_32x32.ico"))
+            self.log_window.iconbitmap(str(CONTENT / "icon" / "icon_64x64.ico"))
             self.log_window.geometry("600x300")
             self.log_window.protocol("WM_DELETE_WINDOW", self._on_close_log_window)
 
@@ -268,7 +268,7 @@ class App:
         
         self.acc_win = tk.Toplevel(self.root)
         self.acc_win.title("Accounts Manager")
-        self.acc_win.iconbitmap(str(CONTENT / "icon" / "icon_32x32.ico"))
+        self.acc_win.iconbitmap(str(CONTENT / "icon" / "icon_64x64.ico"))
         self.acc_win.resizable(False, False)
         center_window(self.acc_win, 300, 250)
 

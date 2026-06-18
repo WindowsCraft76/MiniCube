@@ -1,14 +1,16 @@
-# <img src="https://github.com/WindowsCraft76/MiniCube/blob/Beta/Content/logo/logo_64x64.png?raw=true" alt="Icon" width="25" height="25"> MiniCube
-
-[![Release](https://img.shields.io/github/v/release/WindowsCraft76/MiniCube?style=for-the-badge)](https://github.com/WindowsCraft76/MiniCube/releases)
-[![Downloads)](https://img.shields.io/github/downloads/WindowsCraft76/MiniCube/total?style=for-the-badge)](https://github.com/WindowsCraft76/MiniCube/releases)
-[![License](https://img.shields.io/github/license/WindowsCraft76/MiniCube?style=for-the-badge)](https://github.com/WindowsCraft76/MiniCube/blob/main/LICENSE)
-[![Python](https://img.shields.io/badge/python-3.14-blue?style=for-the-badge)](https://www.python.org/downloads/release/python-3140/)
-[![ko-fi](https://img.shields.io/badge/Support_me_on_Ko--fi-FF5A16?logo=ko-fi&logoColor=white&style=for-the-badge)](https://ko-fi.com/X8X81VIGPB)
-
-*A lightweight and simple Minecraft launcher.*
-
-🔗 **Download the latest version [HERE](https://github.com/WindowsCraft76/MiniCube/releases)**
+<p align="center">
+    <img src="Content/github/banner_white_transparent_330x90.png" alt="Banner" width="330" height="90">
+    <br>
+    <img alt="Release" src="https://img.shields.io/github/v/release/WindowsCraft76/MiniCube?style=for-the-badge&link=https://github.com/WindowsCraft76/MiniCube/releases">
+    <img alt="Downloads" src="https://img.shields.io/github/downloads/WindowsCraft76/MiniCube/total?style=for-the-badge&link=https://github.com/WindowsCraft76/MiniCube/releases">
+    <img alt="License" src="https://img.shields.io/github/license/WindowsCraft76/MiniCube?style=for-the-badge&link=https://github.com/WindowsCraft76/MiniCube/blob/main/LICENSE">
+    <img alt="Python" src="https://img.shields.io/badge/python-3.14-blue?style=for-the-badge&link=https://www.python.org/downloads/release/python-3140/">
+    <img alt="ko-fi" src="https://img.shields.io/badge/Support_me_on_Ko--fi-FF5A16?logo=ko-fi&logoColor=white&style=for-the-badge&link=https://ko-fi.com/X8X81VIGPB">
+    <br>
+    <b>A lightweight and simple Minecraft launcher.</b>
+    <br>
+    🔗 Download the latest version <a href=https://github.com/WindowsCraft76/MiniCube/releases>HERE</a> !
+</p>
 
 ---
 

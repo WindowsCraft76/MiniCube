@@ -59,7 +59,7 @@ def main():
             app = App(root, rpc=rpc, debug=debug)
 
             root.update()
-            root.after(500, splash.root.destroy)
+            root.after(100, splash.root.destroy)
 
             root.deiconify()
 
