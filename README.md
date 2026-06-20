@@ -1,11 +1,21 @@
 <p align="center">
     <img src="Content/github/banner_white_transparent_330x90.png" alt="Banner" width="330" height="90">
     <br>
-    <img alt="Release" src="https://img.shields.io/github/v/release/WindowsCraft76/MiniCube?style=for-the-badge&link=https://github.com/WindowsCraft76/MiniCube/releases">
-    <img alt="Downloads" src="https://img.shields.io/github/downloads/WindowsCraft76/MiniCube/total?style=for-the-badge&link=https://github.com/WindowsCraft76/MiniCube/releases">
-    <img alt="License" src="https://img.shields.io/github/license/WindowsCraft76/MiniCube?style=for-the-badge&link=https://github.com/WindowsCraft76/MiniCube/blob/main/LICENSE">
-    <img alt="Python" src="https://img.shields.io/badge/python-3.14-blue?style=for-the-badge&link=https://www.python.org/downloads/release/python-3140/">
-    <img alt="ko-fi" src="https://img.shields.io/badge/Support_me_on_Ko--fi-FF5A16?logo=ko-fi&logoColor=white&style=for-the-badge&link=https://ko-fi.com/X8X81VIGPB">
+    <a href="https://github.com/WindowsCraft76/MiniCube/releases">
+        <img alt="Release" src="https://img.shields.io/github/v/release/WindowsCraft76/MiniCube?style=for-the-badge">
+    </a>
+    <a href="https://github.com/WindowsCraft76/MiniCube/releases">
+        <img alt="Downloads" src="https://img.shields.io/github/downloads/WindowsCraft76/MiniCube/total?style=for-the-badge">
+    </a>
+    <a href="LICENSE">
+        <img alt="License" src="https://img.shields.io/github/license/WindowsCraft76/MiniCube?style=for-the-badge">
+    </a>
+    <a href="https://www.python.org/downloads/release/python-3140/">
+        <img alt="Python" src="https://img.shields.io/badge/python-3.14-blue?style=for-the-badge">
+    </a>
+    <a href="https://ko-fi.com/X8X81VIGPB">
+        <img alt="ko-fi" src="https://img.shields.io/badge/Support_me_on_Ko--fi-FF5A16?logo=ko-fi&logoColor=white&style=for-the-badge">
+    </a>
     <br>
     <b>A lightweight and simple Minecraft launcher.</b>
     <br>
@@ -67,9 +77,9 @@ python.exe Main.py --debug
 
 Please read the project policies:
 
-* [Terms of Service](https://github.com/WindowsCraft76/MiniCube/blob/main/TERMS_OF_SERVICE.md)
-* [Privacy Policy](https://github.com/WindowsCraft76/MiniCube/blob/main/PRIVACY_POLICY.md)
-* [Disclaimer](https://github.com/WindowsCraft76/MiniCube/blob/main/DISCLAIMER.md)
+* [Terms of Service](TERMS_OF_SERVICE.md)
+* [Privacy Policy](PRIVACY_POLICY.md)
+* [Disclaimer](DISCLAIMER.md)
 
 MiniCube is an independent Minecraft launcher.
 
@@ -80,4 +90,4 @@ Minecraft is a trademark of Mojang Studios.
 
 ## 📄 License
 
-This project is distributed under the MIT license. See [here](https://github.com/WindowsCraft76/MiniCube/blob/main/LICENSE) for more details.
+This project is distributed under the MIT license. See [here](LICENSE) for more details.
