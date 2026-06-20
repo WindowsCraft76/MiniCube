@@ -1,7 +1,9 @@
 <div align="center">
-    <p>
-        <img src="Content/github/banner_white_transparent_330x90.png" alt="Banner" width="330" height="90">
-    </p>
+    <picture>
+        <source srcset="./Content/github/banner_white_transparent_330x90.png" media="(prefers-color-scheme: dark)">
+        <source srcset="./Content/github/banner_black_transparent_330x90.png" media="(prefers-color-scheme: light)">
+        <img src="" alt="Banner" width="330" height="90">
+    </picture>
     <p>
         <a href="https://github.com/WindowsCraft76/MiniCube/releases"><img alt="Release" src="https://img.shields.io/github/v/release/WindowsCraft76/MiniCube?style=for-the-badge"></a>
         <a href="https://github.com/WindowsCraft76/MiniCube/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/WindowsCraft76/MiniCube/total?style=for-the-badge"></a>
