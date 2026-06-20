@@ -1,26 +1,19 @@
-<p align="center">
-    <img src="Content/github/banner_white_transparent_330x90.png" alt="Banner" width="330" height="90">
-    <br>
-    <a href="https://github.com/WindowsCraft76/MiniCube/releases">
-        <img alt="Release" src="https://img.shields.io/github/v/release/WindowsCraft76/MiniCube?style=for-the-badge">
-    </a>
-    <a href="https://github.com/WindowsCraft76/MiniCube/releases">
-        <img alt="Downloads" src="https://img.shields.io/github/downloads/WindowsCraft76/MiniCube/total?style=for-the-badge">
-    </a>
-    <a href="LICENSE">
-        <img alt="License" src="https://img.shields.io/github/license/WindowsCraft76/MiniCube?style=for-the-badge">
-    </a>
-    <a href="https://www.python.org/downloads/release/python-3140/">
-        <img alt="Python" src="https://img.shields.io/badge/python-3.14-blue?style=for-the-badge">
-    </a>
-    <a href="https://ko-fi.com/X8X81VIGPB">
-        <img alt="ko-fi" src="https://img.shields.io/badge/Support_me_on_Ko--fi-FF5A16?logo=ko-fi&logoColor=white&style=for-the-badge">
-    </a>
-    <br>
-    <b>A lightweight and simple Minecraft launcher.</b>
-    <br>
-    🔗 Download the latest version <a href=https://github.com/WindowsCraft76/MiniCube/releases>HERE</a> !
-</p>
+<div align="center">
+    <p>
+        <img src="Content/github/banner_white_transparent_330x90.png" alt="Banner" width="330" height="90">
+    </p>
+    <p>
+        <a href="https://github.com/WindowsCraft76/MiniCube/releases"><img alt="Release" src="https://img.shields.io/github/v/release/WindowsCraft76/MiniCube?style=for-the-badge"></a>
+        <a href="https://github.com/WindowsCraft76/MiniCube/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/WindowsCraft76/MiniCube/total?style=for-the-badge"></a>
+        <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/WindowsCraft76/MiniCube?style=for-the-badge"></a>
+        <a href="https://www.python.org/downloads/release/python-3140/"><img alt="Python" src="https://img.shields.io/badge/python-3.14-blue?style=for-the-badge"></a>
+        <a href="https://ko-fi.com/X8X81VIGPB"><img alt="ko-fi" src="https://img.shields.io/badge/Support_me_on_Ko--fi-FF5A16?logo=ko-fi&logoColor=white&style=for-the-badge"></a>
+    </p>
+    <p>
+        <b>A lightweight and simple Minecraft launcher.</b><br>
+        🔗 Download the latest version <a href=https://github.com/WindowsCraft76/MiniCube/releases>HERE</a>!
+    </p>
+</div>
 
 ---
 
@@ -83,8 +76,10 @@ Please read the project policies:
 
 MiniCube is an independent Minecraft launcher.
 
-This project is not affiliated with Mojang Studios or Microsoft.
-Minecraft is a trademark of Mojang Studios.
+**This project is not affiliated with Mojang Studios or Microsoft.**\
+**Minecraft is a trademark of Mojang Studios.**
+
+If you have any questions, please contact me at the following email address: contact.wincraft76@gmail.com
 
 ---
 
