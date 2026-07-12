@@ -89,7 +89,7 @@ class MicrosoftAuth:
             self.auth_failed = True
             if self.app:
                 self.app.log(f"Authentication failed!: {e}", "error")
-                messagebox.showerror("Authentication Failed", str(e))
+                self.app.root.after(0, lambda: messagebox.showerror("Authentication Failed! See logs for details.", str(e)))
             return None
 
     def _start_local_server(self):

@@ -280,14 +280,25 @@ class App:
         self.acc_win.resizable(False, False)
         center_window(self.acc_win, 300, 250)
 
-        self.acc_listbox = tk.Listbox(self.acc_win)
-        self.acc_listbox.pack(fill=tk.BOTH, expand=True, padx=10, pady=1)
+        self.acc_list_container = tk.Frame(self.acc_win)
+        self.acc_list_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=1)
+
+        self.acc_listbox = tk.Listbox(self.acc_list_container)
+        self.acc_listbox.place(x=0, y=0, relwidth=1, relheight=1)
+
+        self.acc_empty_label = tk.Label(
+            self.acc_list_container,
+            text="No account available",
+            fg="gray"
+        )
 
         btn_frame = tk.Frame(self.acc_win)
         btn_frame.pack(pady=10)
 
-        tk.Button(btn_frame, text="Add account", command=self.add_microsoft_account).pack(side=tk.LEFT, padx=5)
-        tk.Button(btn_frame, text="Delete account", command=self.delete_selected_account).pack(side=tk.LEFT, padx=5)
+        self.add_account_btn = tk.Button(btn_frame, text="Add account", command=self.add_microsoft_account)
+        self.add_account_btn.pack(side=tk.LEFT, padx=5)
+        self.delete_account_btn = tk.Button(btn_frame, text="Delete account", command=self.delete_selected_account)
+        self.delete_account_btn.pack(side=tk.LEFT, padx=5)
 
         self.refresh_account_listbox()
 
@@ -301,8 +312,52 @@ class App:
         self.acc_win = None
 
     def add_microsoft_account(self):
-        ms_auth = MicrosoftAuth(app=self)
-        account_data = ms_auth.login()
+        if hasattr(self, "add_account_btn"):
+            self.add_account_btn.config(state="disabled")
+
+        self._show_connecting_popup()
+
+        def worker():
+            ms_auth = MicrosoftAuth(app=self)
+            account_data = ms_auth.login()
+            self.root.after(0, lambda: self._on_login_finished(account_data))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _show_connecting_popup(self):
+        self.connecting_win = tk.Toplevel(self.acc_win)
+        self.connecting_win.title("Connecting...")
+        self.connecting_win.resizable(False, False)
+        try:
+            self.connecting_win.iconbitmap(str(CONTENT / "icon" / "icon_64x64.ico"))
+        except Exception:
+            pass
+        center_window(self.connecting_win, 300, 110)
+        self.connecting_win.transient(self.acc_win)
+        self.connecting_win.protocol("WM_DELETE_WINDOW", lambda: None)
+
+        tk.Label(
+            self.connecting_win,
+            text="Connecting to Microsoft...\nPlease continue in your browser.",
+            justify="center",
+            padx=15,
+            pady=25
+        ).pack()
+
+        self.connecting_win.grab_set()
+
+    def _on_login_finished(self, account_data):
+        if getattr(self, "connecting_win", None) and self.connecting_win.winfo_exists():
+            try:
+                self.connecting_win.grab_release()
+                self.connecting_win.destroy()
+            except Exception:
+                pass
+        self.connecting_win = None
+
+        if hasattr(self, "add_account_btn"):
+            self.add_account_btn.config(state="normal")
+
         if account_data:
             self.account_manager.add_account(account_data)
             self.refresh_account_listbox()
@@ -331,13 +386,17 @@ class App:
         accounts = self.account_manager.get_all_accounts()
 
         if not accounts:
-            self.acc_listbox.insert(tk.END, "No account available")
-            self.acc_listbox.itemconfig(0, fg="gray")
             self.acc_listbox.config(state="disabled")
+            self.acc_empty_label.place(relx=0.5, rely=0.5, anchor="center")
+            if hasattr(self, "delete_account_btn"):
+                self.delete_account_btn.config(state="disabled")
         else:
+            self.acc_empty_label.place_forget()
             self.acc_listbox.config(state="normal")
             for acc in accounts:
                 self.acc_listbox.insert(tk.END, acc['username'])
+            if hasattr(self, "delete_account_btn"):
+                self.delete_account_btn.config(state="normal")
 
     def delete_selected_account(self):
         if not hasattr(self, "acc_listbox"):
@@ -585,9 +644,9 @@ class App:
                 self.version_manifest = json.load(f)
             self.log("Version manifest fetched successfully!", "success")
             return True
-        except Exception:
-            self.root.after(0, lambda: messagebox.showerror("Error", "Unable to fetch manifest!"))
-            self.log("Error fetching version manifest!", "error")
+        except Exception as e:
+            self.root.after(0, lambda: messagebox.showerror("Error", "Unable to fetch manifest! See logs for details."))
+            self.log(f"Error fetching version manifest! {e}", "error")
             return False
 
     def _apply_version_list_to_ui(self):
@@ -903,7 +962,8 @@ class App:
                 self.root.after(0, lambda: self.set_ui_state(True))
                 return
         except Exception as e:
-            self.root.after(0, lambda: messagebox.showerror("Error", f"Unable to prepare the version: {e}"))
+            self.log(f"Unable to prepare the version: {e}", "error")
+            self.root.after(0, lambda: messagebox.showerror("Error", f"Unable to prepare the version! See logs for details."))
             self.root.after(0, lambda: self.launch_btn.config(text="Launch game"))
             self.root.after(0, lambda: self.set_ui_state(True))
             return
