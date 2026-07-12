@@ -5,6 +5,7 @@ import threading
 import urllib.parse
 import time
 import requests
+import SkinManager
 from tkinter import messagebox
 from Config import (
     CLIENT_ID, REDIRECT_URI, SCOPE, AUTH_URL,
@@ -74,6 +75,9 @@ class MicrosoftAuth:
             xsts_token, uhs = self._get_xsts_token(xbl_token)
             mc_token = self._get_minecraft_token(xsts_token, uhs)
             profile = self._get_minecraft_profile(mc_token)
+
+            skin_url = self._get_skin_url(profile)
+            SkinManager.fetch_and_cache_head(profile["id"], skin_url, app=self.app)
 
             if self.app:
                 self.app.log(f"Authentication successful! Welcome {profile['name']}", "success")
@@ -211,6 +215,15 @@ class MicrosoftAuth:
         r.raise_for_status()
         return r.json()
 
+    def _get_skin_url(self, profile: dict):
+        skins = profile.get("skins") or []
+        for skin in skins:
+            if skin.get("state") == "ACTIVE" and skin.get("url"):
+                return skin["url"]
+        if skins and skins[0].get("url"):
+            return skins[0]["url"]
+        return None
+
     def refresh_token(self, account_data: dict):
         refresh_tok = account_data.get("refresh_token")
         if not refresh_tok:
@@ -250,8 +263,17 @@ class MicrosoftAuth:
             account_data["access_token"] = mc_token
             account_data["refresh_token"] = new_ms_refresh
 
+            try:
+                profile = self._get_minecraft_profile(mc_token)
+                skin_url = self._get_skin_url(profile)
+                SkinManager.fetch_and_cache_head(account_data.get("uuid"), skin_url, app=self.app)
+            except Exception as e:
+                if self.app:
+                    self.app.log(f"Could not refresh cached player head: {e}", "warn")
+
             if self.app:
                 self.app.log(f"Token refreshed successfully for {account_data.get('username')}.", "success")
+                self.app.update_progress("Token refreshed!")
 
             return account_data
 

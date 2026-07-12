@@ -17,6 +17,7 @@ OBJECTS_DIR   = ASSETS_DIR / "objects"
 JAVA_DIR      = META_DIR / "java_versions"
 NATIVES_DIR   = META_DIR / "natives"
 
+CACHE_DIR     = DATA_DIR / "Cache"
 SETTINGS_FILE = DATA_DIR / "settings.json"
 ACCOUNTS_FILE = DATA_DIR / "accounts.pem"
 SALT_FILE     = DATA_DIR / ".salt"
@@ -24,8 +25,11 @@ SALT_FILE     = DATA_DIR / ".salt"
 for _d in [
     META_DIR, DATA_DIR, GAME_DIR, VERSIONS_DIR, ASSETS_DIR,
     LIBRARIES_DIR, INDEXES_DIR, OBJECTS_DIR, JAVA_DIR, NATIVES_DIR, LOGS_DIR,
+    CACHE_DIR,
 ]:
     _d.mkdir(parents=True, exist_ok=True)
+
+HEAD_ICON_SIZE = 64
 
 CLIENT_ID_RPC = "1476290026626355231"
 
@@ -55,5 +59,5 @@ DOWNLOADLAST_URL = "https://windowscraft76.fr/minicube/r/downloadlast/"
 
 copyright = "Copyright (c) 2026 WindowsCraft76"
 
-REGISTRY_KEY_PATH = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\MiniCube"
+REGISTRY_KEY_PATH   = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\MiniCube"
 REGISTRY_VALUE_NAME = "DisplayVersion"

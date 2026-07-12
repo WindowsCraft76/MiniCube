@@ -16,9 +16,10 @@ from Config import (
     CONTENT, INDEXES_DIR, GAME_DIR, ASSETS_DIR, SETTINGS_FILE,
     VERSIONS_DIR, LIBRARIES_DIR, OBJECTS_DIR, JAVA_DIR, PAGE_URL,
     VERSION_MANIFEST_URL, RESSOURCE_MC_URL, API_AZUL_URL, NATIVES_DIR,
-    TERMS_URL, PRIVACY_URL, DISCLAIMER_URL, ISSUES_URL, DOWNLOADLAST_URL, copyright
+    TERMS_URL, PRIVACY_URL, DISCLAIMER_URL, ISSUES_URL, DOWNLOADLAST_URL,
+    copyright, CACHE_DIR
     )
-from VersionManager import get_info_version, check_for_update, get_update_page_url
+from VersionManager import check_for_update, get_update_page_url, get_local_version_type
 from DiscordRPC import DiscordRPC
 from SplashScreen import center_window
 
@@ -32,6 +33,10 @@ class App:
         self.log_window = None
         self.log_text_win = None
         self.log_buffer = []
+
+        info = check_for_update()
+        local_display = info["local_display_version"]
+        local_version_type = get_local_version_type(info["local_raw_version"])
 
         style = ttk.Style()
         style.theme_use('default')
@@ -59,7 +64,7 @@ class App:
             command=lambda:
             messagebox.showinfo(
             "About",
-            f"MiniCube\nCreated by WindowsCraft76\n\nVersion installed: {get_info_version()}\n\nThis is an open-source project under the MIT license.\nMiniCube is not affiliated with, endorsed by, or supported by Mojang Studios or Microsoft.\n\n{copyright}",
+            f"MiniCube\nCreated by WindowsCraft76\n\nVersion installed: {local_display} ({local_version_type})\nOperating system: {platform.system()}\nPython version: {platform.python_version()}\n\nThis is an open-source project under the MIT license.\nMiniCube is not affiliated with, endorsed by, or supported by Mojang Studios or Microsoft.\n\n{copyright}",
         ))
         help.add_command(label="Open page", command=lambda: webbrowser.open(PAGE_URL))
         help.add_separator()
@@ -98,6 +103,8 @@ class App:
         self.selected_account_var = tk.StringVar()
         self.is_offline_var = tk.BooleanVar(value=False)
         self.accounts_list = []
+        self.default_account = None
+        self.last_used_account = None
 
         self.load_settings()
 
@@ -115,6 +122,7 @@ class App:
             textvariable=self.selected_account_var,
             state="readonly"
         )
+        self.account_menu.bind("<<ComboboxSelected>>", self._on_account_selected)
 
         self.offline_label = tk.Label(self.account_frame, text="Username:")
         self.offline_entry = tk.Entry(self.account_frame, textvariable=self.username_var)
@@ -264,6 +272,15 @@ class App:
         self.log_window = None
         self.log_text_win = None
 
+    def _on_account_selected(self, event=None):
+        username = self.selected_account_var.get()
+        if not username or username == "No account":
+            return
+
+        account_data = self.account_manager.get_account_by_name(username)
+        if account_data and account_data.get("uuid"):
+            self._update_account_prefs(last_used_account=account_data["uuid"])
+
     def toggle_accounts_manager_window(self):
         if getattr(self, "acc_win", None) and self.acc_win.winfo_exists():
             try:
@@ -280,11 +297,11 @@ class App:
         self.acc_win.resizable(False, False)
         center_window(self.acc_win, 300, 250)
 
-        self.acc_list_container = tk.Frame(self.acc_win)
+        self.acc_list_container = tk.Frame(self.acc_win, relief=tk.SUNKEN, bd=1, bg="white")
         self.acc_list_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=1)
 
-        self.acc_listbox = tk.Listbox(self.acc_list_container)
-        self.acc_listbox.place(x=0, y=0, relwidth=1, relheight=1)
+        self.acc_rows_frame = tk.Frame(self.acc_list_container, bg="white")
+        self.acc_rows_frame.place(x=0, y=0, relwidth=1, relheight=1)
 
         self.acc_empty_label = tk.Label(
             self.acc_list_container,
@@ -292,13 +309,15 @@ class App:
             fg="gray"
         )
 
+        self.acc_head_images = {}
+        self.acc_row_widgets = {}
+        self.selected_account_row = None
+
         btn_frame = tk.Frame(self.acc_win)
         btn_frame.pack(pady=10)
 
         self.add_account_btn = tk.Button(btn_frame, text="Add account", command=self.add_microsoft_account)
         self.add_account_btn.pack(side=tk.LEFT, padx=5)
-        self.delete_account_btn = tk.Button(btn_frame, text="Delete account", command=self.delete_selected_account)
-        self.delete_account_btn.pack(side=tk.LEFT, padx=5)
 
         self.refresh_account_listbox()
 
@@ -332,7 +351,7 @@ class App:
             self.connecting_win.iconbitmap(str(CONTENT / "icon" / "icon_64x64.ico"))
         except Exception:
             pass
-        center_window(self.connecting_win, 300, 110)
+        center_window(self.connecting_win, 280, 90)
         self.connecting_win.transient(self.acc_win)
         self.connecting_win.protocol("WM_DELETE_WINDOW", lambda: None)
 
@@ -372,45 +391,186 @@ class App:
             self.account_menu.config(state="disabled")
         else:
             names = [acc['username'] for acc in accounts]
+            usernames_by_uuid = {acc.get('uuid'): acc['username'] for acc in accounts}
             self.account_menu['values'] = names
-            self.selected_account_var.set(names[0])
+
+            if self.default_account in usernames_by_uuid:
+                chosen = usernames_by_uuid[self.default_account]
+            elif self.last_used_account in usernames_by_uuid:
+                chosen = usernames_by_uuid[self.last_used_account]
+            else:
+                chosen = names[0]
+
+            self.selected_account_var.set(chosen)
             self.account_menu.config(state="readonly")
 
         self.toggle_account_mode()
 
+    def _get_head_photoimage(self, uuid, size=25):
+        if not uuid:
+            return None
+
+        head_path = CACHE_DIR / f"{uuid}.png"
+        if not head_path.exists():
+            return None
+
+        try:
+            img = tk.PhotoImage(file=str(head_path))
+            factor = max(1, img.width() // size)
+            if factor > 1:
+                img = img.subsample(factor, factor)
+            return img
+        except Exception:
+            return None
+
+    def _select_account_row(self, username):
+        self.selected_account_row = username
+        for uname, row in self.acc_row_widgets.items():
+            color = "#cde6ff" if uname == username else "white"
+            try:
+                row.config(bg=color)
+                for child in row.winfo_children():
+                    child.config(bg=color)
+            except Exception:
+                pass
+
     def refresh_account_listbox(self):
-        if not hasattr(self, "acc_listbox"):
+        if not hasattr(self, "acc_rows_frame"):
             return
 
-        self.acc_listbox.delete(0, tk.END)
+        for widget in self.acc_rows_frame.winfo_children():
+            widget.destroy()
+        self.acc_row_widgets = {}
+        self.acc_head_images = {}
+
         accounts = self.account_manager.get_all_accounts()
+        accounts = sorted(
+            accounts,
+            key=lambda acc: 0 if acc.get("uuid") == self.default_account else 1
+        )
 
         if not accounts:
-            self.acc_listbox.config(state="disabled")
             self.acc_empty_label.place(relx=0.5, rely=0.5, anchor="center")
-            if hasattr(self, "delete_account_btn"):
-                self.delete_account_btn.config(state="disabled")
+            self.selected_account_row = None
+            return
+
+        self.acc_empty_label.place_forget()
+
+        for acc in accounts:
+            username = acc.get("username")
+            uuid = acc.get("uuid")
+
+            row = tk.Frame(self.acc_rows_frame, height=40, cursor="hand2", bg="white")
+            row.pack(fill=tk.X)
+            row.pack_propagate(False)
+
+            head_img = self._get_head_photoimage(uuid)
+            if head_img is not None:
+                self.acc_head_images[username] = head_img
+                icon_label = tk.Label(row, image=head_img, bg="white")
+            else:
+                icon_label = tk.Label(row, width=4, bg="white")
+            icon_label.pack(side=tk.LEFT, padx=(10, 4))
+
+            options_btn = tk.Button(
+                row, text="⋮", bg="white", relief=tk.FLAT,
+                font=("Segoe UI", 12, "bold"), width=2,
+                command=lambda u=username, uid=uuid: self._open_account_options_menu(u, uid)
+            )
+            options_btn.pack(side=tk.RIGHT, padx=(4, 10))
+
+            star_label = tk.Label(
+                row, text="★" if uuid == self.default_account else "",
+                bg="white", fg="#f4b400", font=("Segoe UI", 12, "bold"), width=2
+            )
+            star_label.pack(side=tk.RIGHT)
+
+            name_label = tk.Label(
+                row, text=username, bg="white",
+                font=("Segoe UI", 10), anchor="center"
+            )
+            name_label.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+            for widget in (row, icon_label, name_label):
+                widget.bind("<Button-1>", lambda e, u=username: self._select_account_row(u))
+
+            self.acc_row_widgets[username] = row
+
+        if self.selected_account_row in self.acc_row_widgets:
+            self._select_account_row(self.selected_account_row)
+
+    def _open_account_options_menu(self, username, uuid):
+        self._select_account_row(username)
+        is_default = (uuid == self.default_account)
+
+        menu = tk.Menu(self.acc_win, tearoff=0)
+        menu.add_command(label="Refresh token", command=lambda: self._refresh_selected_account_token(username))
+        if is_default:
+            menu.add_command(label="Remove default account", command=lambda: self._unset_default_account(uuid))
         else:
-            self.acc_empty_label.place_forget()
-            self.acc_listbox.config(state="normal")
-            for acc in accounts:
-                self.acc_listbox.insert(tk.END, acc['username'])
-            if hasattr(self, "delete_account_btn"):
-                self.delete_account_btn.config(state="normal")
+            menu.add_command(label="Set as default account", command=lambda: self._set_default_account(uuid))
+        menu.add_command(label="Delete account", command=lambda: self._delete_account(username))
 
-    def delete_selected_account(self):
-        if not hasattr(self, "acc_listbox"):
+        try:
+            x = self.acc_win.winfo_pointerx()
+            y = self.acc_win.winfo_pointery()
+            menu.tk_popup(x, y)
+        finally:
+            menu.grab_release()
+
+    def _set_default_account(self, uuid):
+        self._update_account_prefs(default_account=uuid)
+        self.refresh_account_listbox()
+
+    def _unset_default_account(self, uuid):
+        if self.default_account == uuid:
+            self._update_account_prefs(default_account=None)
+        self.refresh_account_listbox()
+
+    def _refresh_selected_account_token(self, username):
+        account_data = self.account_manager.get_account_by_name(username)
+        if not account_data:
             return
 
-        selection = self.acc_listbox.curselection()
-        if not selection:
-            messagebox.showwarning("Warning", "No account selected")
+        def worker():
+            auth = MicrosoftAuth(app=self)
+            refreshed = auth.refresh_token(account_data)
+
+            def finish():
+                if refreshed:
+                    self.account_manager.remove_account(refreshed['username'])
+                    self.account_manager.add_account(refreshed)
+                    self.refresh_account_listbox()
+                    self.refresh_accounts_ui()
+                else:
+                    messagebox.showerror(
+                        "Authentication Error",
+                        f"Failed to refresh token for {username}.\nPlease log in again."
+                    )
+
+            self.root.after(0, finish)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _delete_account(self, username):
+        if not messagebox.askyesno("Delete account", f"Delete account {username}?"):
             return
 
-        index = selection[0]
-        username = self.acc_listbox.get(index)
+        account_data = self.account_manager.get_account_by_name(username)
+        uuid = account_data.get("uuid") if account_data else None
 
         self.account_manager.remove_account(username)
+        if self.selected_account_row == username:
+            self.selected_account_row = None
+
+        updates = {}
+        if uuid and self.default_account == uuid:
+            updates["default_account"] = None
+        if uuid and self.last_used_account == uuid:
+            updates["last_used_account"] = None
+        if updates:
+            self._update_account_prefs(**updates)
+
         self.refresh_account_listbox()
         self.refresh_accounts_ui()
 
@@ -430,6 +590,8 @@ class App:
             self.show_snapshots_var.set(data.get("show_snapshots", False))
             self.show_old_var.set(data.get("show_old_versions", False))
             self.discord_rpc_var.set(data.get("discord_rpc", True))
+            self.default_account = data.get("default_account")
+            self.last_used_account = data.get("last_used_account")
 
             self.log("Settings loaded!", "success")
         except Exception as e:
@@ -441,8 +603,31 @@ class App:
             "ram": self.ram_var.get(),
             "show_snapshots": self.show_snapshots_var.get(),
             "show_old_versions": self.show_old_var.get(),
-            "discord_rpc": self.discord_rpc_var.get()
+            "discord_rpc": self.discord_rpc_var.get(),
+            "default_account": self.default_account,
+            "last_used_account": self.last_used_account
         }
+
+        try:
+            with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=4)
+        except Exception as e:
+            self.log(f"Error saving settings: {e}", "error")
+
+    def _update_account_prefs(self, **updates):
+        for key, value in updates.items():
+            setattr(self, key, value)
+
+        data = {}
+        if SETTINGS_FILE.exists():
+            try:
+                with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except Exception:
+                data = {}
+
+        data["default_account"] = self.default_account
+        data["last_used_account"] = self.last_used_account
 
         try:
             with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
@@ -1012,6 +1197,8 @@ class App:
             uuid = account_data['uuid']
             token = account_data['access_token']
 
+            self._update_account_prefs(last_used_account=uuid)
+
         args = [
             str(java_path),
             f"-Djava.library.path={natives_dir}",
@@ -1035,13 +1222,13 @@ class App:
             self.update_progress("Game running...")
             self.rpc.update(
                 details=f"Playing Minecraft {version_id}",
-                small_image=f"https://mc-heads.net/avatar/{uuid}/32",
+                small_image=f"https://windowscraft76.fr/minicube/api?assets=steve_32x32.png" if self.is_offline_var.get() else f"https://mc-heads.net/avatar/{uuid}/32",
                 small_text=f"Playing offline as {active_user}" if self.is_offline_var.get() else f"Playing as {active_user}"
             )
             game_process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             self.root.after(0, lambda: self.launch_btn.config(state="disabled", text="Ready!"))
         except Exception as e:
-            self.log(f"[ERROR] Unable to start Java process: {e}", "error")
+            self.log(f"Unable to start Java process: {e}", "error")
             self.root.after(0, lambda: self.launch_btn.config(text="Launch game"))
             self.root.after(0, lambda: self.set_ui_state(True))
             return

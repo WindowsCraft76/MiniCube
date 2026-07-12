@@ -14,6 +14,8 @@ TYPE_SUFFIXES = {
     "beta": "b",
 }
 
+SUFFIX_TO_TYPE = {v: k for k, v in TYPE_SUFFIXES.items()}
+
 def _query_registry(use32bit_view: bool = False) -> str:
     if winreg is None:
         return ""
@@ -80,6 +82,13 @@ def get_local_suffix(numeric_version: str) -> str:
             pass
 
     return "r"
+
+
+def get_local_version_type(numeric_version: str) -> str:
+    if not numeric_version:
+        return "None"
+    suffix = get_local_suffix(numeric_version)
+    return SUFFIX_TO_TYPE.get(suffix, "release").capitalize()
 
 
 def format_local_version_for_display(numeric_version: str) -> str:
@@ -223,5 +232,5 @@ def check_for_update(beta_fallback: bool = True):
     }
 
 
-def get_update_page_url(remote_version=None):
+def get_update_page_url():
     return DOWNLOADLAST_URL
