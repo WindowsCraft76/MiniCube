@@ -2,8 +2,8 @@ import os
 from pathlib import Path
 
 CONTENT       = Path(__file__).resolve().parent.parent / "Content"
-
 BASE_DIR      = Path(os.path.expandvars(r"%appdata%")) / ".MiniCube"
+
 META_DIR      = BASE_DIR / "Meta"
 GAME_DIR      = BASE_DIR / "GameFile"
 DATA_DIR      = BASE_DIR / "Data"
@@ -37,14 +37,23 @@ AUTH_URL  = "https://login.live.com/oauth20_authorize.srf"
 TOKEN_URL = "https://login.live.com/oauth20_token.srf"
 
 XBOX_USER_AUTH_URL = "https://user.auth.xboxlive.com/user/authenticate"
-XBOX_XSTS_URL = "https://xsts.auth.xboxlive.com/xsts/authorize"
+XBOX_XSTS_URL      = "https://xsts.auth.xboxlive.com/xsts/authorize"
 
 API_MCSERVICES_URL = "https://api.minecraftservices.com/"
-API_AZUL_URL         = "https://api.azul.com"
-API_GITHUB_URL       = "https://api.github.com"
+API_AZUL_URL       = "https://api.azul.com"
+API_URL            = "https://windowscraft76.fr/minicube/api"
 
 VERSION_MANIFEST_URL = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json"
 RESSOURCE_MC_URL     = "https://resources.download.minecraft.net"
-PAGE_URL             = "https://github.com/WindowsCraft76/MiniCube"
+
+PAGE_URL         = "https://windowscraft76.fr/minicube/"
+DISCLAIMER_URL   = "https://windowscraft76.fr/minicube/r/disclaimer/"
+TERMS_URL        = "https://windowscraft76.fr/minicube/r/terms/"
+PRIVACY_URL      = "https://windowscraft76.fr/minicube/r/privacy/"
+ISSUES_URL       = "https://windowscraft76.fr/minicube/r/issues/"
+DOWNLOADLAST_URL = "https://windowscraft76.fr/minicube/r/downloadlast/"
 
 copyright = "Copyright (c) 2026 WindowsCraft76"
+
+REGISTRY_KEY_PATH = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\MiniCube"
+REGISTRY_VALUE_NAME = "DisplayVersion"

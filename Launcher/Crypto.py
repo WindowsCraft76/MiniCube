@@ -7,7 +7,7 @@ from cryptography.hazmat.primitives import hashes
 
 from Config import SALT_FILE
 
-_KEYRING_SERVICE  = "MiniCube"
+_KEYRING_SERVICE  = "MiniCube_v1_"
 _KEYRING_USERNAME = "account_secret"
 _FERNET: Fernet | None = None
 

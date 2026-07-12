@@ -15,9 +15,10 @@ from AccountManager import AccountManager
 from Config import (
     CONTENT, INDEXES_DIR, GAME_DIR, ASSETS_DIR, SETTINGS_FILE,
     VERSIONS_DIR, LIBRARIES_DIR, OBJECTS_DIR, JAVA_DIR, PAGE_URL,
-    VERSION_MANIFEST_URL, RESSOURCE_MC_URL, API_AZUL_URL, NATIVES_DIR, copyright
+    VERSION_MANIFEST_URL, RESSOURCE_MC_URL, API_AZUL_URL, NATIVES_DIR,
+    TERMS_URL, PRIVACY_URL, DISCLAIMER_URL, ISSUES_URL, DOWNLOADLAST_URL, copyright
     )
-from VersionsManager import get_info_version, get_remote_version, is_version_lower, get_update_page_url
+from VersionManager import get_info_version, check_for_update, get_update_page_url
 from DiscordRPC import DiscordRPC
 from SplashScreen import center_window
 
@@ -31,6 +32,49 @@ class App:
         self.log_window = None
         self.log_text_win = None
         self.log_buffer = []
+
+        style = ttk.Style()
+        style.theme_use('default')
+        if debug:
+            self.root.title("MiniCube - Debug Mode")
+        else:
+            self.root.title("MiniCube")
+        self.root.geometry("330x270")
+        self.root.resizable(False, False)
+        self.root.iconbitmap(str(CONTENT / "icon" / "icon_64x64.ico"))
+
+        self.toolbar = tk.Menu(root)
+        menu = tk.Menu(self.toolbar, tearoff=0)
+        menu.add_command(label="Show logs", command=self.toggle_logs_window)
+        menu.add_command(label="Manage accounts", command=self.toggle_accounts_manager_window)
+        menu.add_command(label="Settings", command=self.toggle_settings_window)
+        menu.add_command(label="Open folder", command=self.open_folder)
+        menu.add_separator()
+        menu.add_command(label="Exit", command=lambda: [root.destroy()])
+        self.toolbar.add_cascade(label="Menu", menu=menu)
+
+        help = tk.Menu(self.toolbar, tearoff=0)
+        help.add_command(
+            label="About",
+            command=lambda:
+            messagebox.showinfo(
+            "About",
+            f"MiniCube\nCreated by WindowsCraft76\n\nVersion installed: {get_info_version()}\n\nThis is an open-source project under the MIT license.\nMiniCube is not affiliated with, endorsed by, or supported by Mojang Studios or Microsoft.\n\n{copyright}",
+        ))
+        help.add_command(label="Open page", command=lambda: webbrowser.open(PAGE_URL))
+        help.add_separator()
+        help.add_command(label="Terms of Service", command=lambda: webbrowser.open(f"{TERMS_URL}"))
+        help.add_command(label="Privacy Policy", command=lambda: webbrowser.open(f"{PRIVACY_URL}"))
+        help.add_command(label="Disclaimer", command=lambda: webbrowser.open(f"{DISCLAIMER_URL}"))
+        help.add_separator()
+        help.add_command(label="Report Issue", command=lambda: webbrowser.open(f"{ISSUES_URL}"))
+        self.toolbar.add_cascade(label="Help", menu=help)
+
+        self.root.config(menu=self.toolbar)
+
+        self.UPDATE_LABEL = "New update available"
+
+        self.start_launch_sequence()
 
         if debug:
             self.log("Debug mode enabled!", "debug")
@@ -61,40 +105,6 @@ class App:
             self.rpc.start_rpc()
 
         self.log("Loading interface...", "info")
-
-        style = ttk.Style()
-        style.theme_use('default')
-        self.root.title("MiniCube")
-        self.root.geometry("330x270")
-        self.root.resizable(False, False)
-        self.root.iconbitmap(str(CONTENT / "icon" / "icon_64x64.ico"))
-
-        self.toolbar = tk.Menu(root)
-        menu = tk.Menu(self.toolbar, tearoff=0)
-        menu.add_command(label="Show logs", command=self.toggle_logs_window)
-        menu.add_command(label="Manage accounts", command=self.toggle_accounts_manager_window)
-        menu.add_command(label="Settings", command=self.toggle_settings_window)
-        menu.add_command(label="Open folder", command=self.open_folder)
-        menu.add_separator()
-        menu.add_command(label="Exit", command=lambda: [root.destroy()])
-        self.toolbar.add_cascade(label="Menu", menu=menu)
-
-        help = tk.Menu(self.toolbar, tearoff=0)
-        help.add_command(
-            label="About",
-            command=lambda:
-            messagebox.showinfo(
-            "About",
-            f"MiniCube\nCreated by WindowsCraft76\n\nVersion: {get_info_version()}\n\nThis is an open-source project under the MIT license.\nMiniCube is not affiliated with, endorsed by, or supported by Mojang Studios or Microsoft.\n\n{copyright}",
-        ))
-        help.add_command(label="Terms of Service", command=lambda: webbrowser.open(f"{PAGE_URL}/blob/main/TERMS_OF_SERVICE.md"))
-        help.add_command(label="Privacy Policy", command=lambda: webbrowser.open(f"{PAGE_URL}/blob/main/PRIVACY_POLICY.md"))
-        help.add_command(label="Open page", command=lambda: webbrowser.open(PAGE_URL))
-        self.toolbar.add_cascade(label="Help", menu=help)
-
-        self.root.config(menu=self.toolbar)
-
-        self.UPDATE_LABEL = "New update available"
 
         self.account_frame = tk.Frame(root)
         self.account_frame.pack(pady=(5, 0))
@@ -133,8 +143,6 @@ class App:
         self.progress_label.pack(pady=(10, 0))
 
         self.version_manifest = {}
-        self.check_version_mismatch_async()
-        self.refresh_version_list()
 
     def toggle_settings_window(self):
         if getattr(self, "settings_window", None) and self.settings_window.winfo_exists():
@@ -478,42 +486,57 @@ class App:
 
     def check_version_mismatch(self):
 
+        info = check_for_update()
+
+        local_display = info["local_display_version"]
+        remote_display = info["remote_display_version"]
+        remote_numeric = info["remote_version"]
+
+        if self.debug:
+            self.log(f"Info version:\nLocal version: {local_display}\nRemote version: {remote_display}", "debug")
+            return
+
         self.log("Checking for updates...", "info")
 
-        local = get_info_version()
-        remote = get_remote_version()
-
-        if remote.startswith("Error"):
-            self._remove_update_toolbar_entry()
-            try:
-                self.update_btn.pack_forget()
-            except Exception:
-                pass
+        if remote_numeric.startswith("Error"):
+            self.log(f"Unable to check for updates: {remote_numeric}", "error")
+            self.root.after(0, self._remove_update_toolbar_entry)
+            self.root.after(0, self._hide_update_button)
             return
 
-        if is_version_lower(local, remote):
-            self._add_update_toolbar_entry(remote)
-            self.log(f"Update available: {local} -> {remote}", "warn")
+        if info["update_available"]:
+            self.log(f"Update available: {local_display} -> {remote_display} ({DOWNLOADLAST_URL})", "info")
+            self.root.after(0, lambda: self._add_update_toolbar_entry(remote_display))
         else:
-            self._remove_update_toolbar_entry()
-            try:
-                self.update_btn.pack_forget()
-            except Exception:
-                pass
-            self.log(f"Launcher up to date ({local})", "success")
+            self.log(f"Launcher up to date ({local_display})", "info")
+            self.root.after(0, self._remove_update_toolbar_entry)
+            self.root.after(0, self._hide_update_button)
+
+    def _hide_update_button(self):
+        try:
+            self.update_btn.pack_forget()
+        except Exception:
+            pass
 
 
-    def check_version_mismatch_async(self):
-        threading.Thread(target=self._check_version_thread, daemon=True).start()
+    def start_launch_sequence(self):
+        threading.Thread(target=self._launch_sequence_worker, daemon=True).start()
 
-    def _check_version_thread(self):
-        if self.debug:
-            return
+    def _launch_sequence_worker(self):
         try:
             self.check_version_mismatch()
         except Exception as e:
             try:
-                self.log(f"Erreur checking for updates! ({e})", "error")
+                self.log(f"Error checking for updates! ({e})", "error")
+            except Exception:
+                pass
+
+        try:
+            if self._fetch_version_manifest():
+                self.root.after(0, self._apply_version_list_to_ui)
+        except Exception as e:
+            try:
+                self.log(f"Error loading versions! ({e})", "error")
             except Exception:
                 pass
 
@@ -550,21 +573,26 @@ class App:
                 pass
 
     def refresh_version_list(self):
+        if self._fetch_version_manifest():
+            self._apply_version_list_to_ui()
 
+    def _fetch_version_manifest(self) -> bool:
         self.log("Fetching version manifest...", "info")
 
         try:
             urllib.request.urlretrieve(VERSION_MANIFEST_URL, VERSIONS_DIR / "version_manifest.json")
             with open(VERSIONS_DIR / "version_manifest.json", "r", encoding="utf-8") as f:
                 self.version_manifest = json.load(f)
-                self.log("Version manifest fetched successfully!", "success")
-        except Exception as e:
-            messagebox.showerror("Error", f"Unable to fetch manifest!")
-            self.log(f"Error fetching version manifest!", "error")
-            return
+            self.log("Version manifest fetched successfully!", "success")
+            return True
+        except Exception:
+            self.root.after(0, lambda: messagebox.showerror("Error", "Unable to fetch manifest!"))
+            self.log("Error fetching version manifest!", "error")
+            return False
 
+    def _apply_version_list_to_ui(self):
         items = []
-        for v in self.version_manifest["versions"]:
+        for v in self.version_manifest.get("versions", []):
             vtype = v.get("type", "")
             if vtype == "release":
                 items.append(v)
@@ -689,7 +717,6 @@ class App:
         done = 0
         total = len(tasks)
         start_time = time.time()
-        style = ttk.Style()
         for kind, path, url in tasks:
             if self.cancel_download:
                 self.log("Download canceled!", "info")
@@ -962,8 +989,6 @@ class App:
         for line in iter(game_process.stdout.readline, ''):
             self.log(line.strip("\n"), "game")
         game_process.wait()
-
-        style = ttk.Style()
 
         self.root.after(0, lambda: self.launch_btn.config(text="Launch game"))
         self.root.after(0, lambda: self.set_ui_state(True))

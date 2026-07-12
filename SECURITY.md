@@ -1,6 +1,6 @@
 # Security Policy - MiniCube
 
-**Last updated:** 2026-05-13
+**Last updated:** 2026-07-12
 
 ## Supported Versions
 
@@ -13,7 +13,7 @@
 
 ## Reporting a Vulnerability
 
-If you find a security vulnerability in a supported version of the application, please report it [here](https://github.com/WindowsCraft76/MiniCube/issues/new)!
+If you find a security vulnerability in a supported version of the application, please report it [here](https://windowscraft76.fr/minicube/r/issues/)!
 
 ## Version Numbering System
 

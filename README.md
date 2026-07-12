@@ -5,15 +5,15 @@
         <img src="" alt="Banner" width="330" height="90">
     </picture>
     <p>
-        <a href="https://github.com/WindowsCraft76/MiniCube/releases"><img alt="Release" src="https://img.shields.io/github/v/release/WindowsCraft76/MiniCube?style=for-the-badge"></a>
-        <a href="https://github.com/WindowsCraft76/MiniCube/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/WindowsCraft76/MiniCube/total?style=for-the-badge"></a>
-        <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/WindowsCraft76/MiniCube?style=for-the-badge"></a>
+        <a href="https://windowscraft76.fr/minicube/r/download/"><img alt="Release" src="https://img.shields.io/github/v/release/WindowsCraft76/MiniCube?style=for-the-badge"></a>
+        <a href="https://windowscraft76.fr/minicube/r/download/"><img alt="Downloads" src="https://img.shields.io/github/downloads/WindowsCraft76/MiniCube/total?style=for-the-badge"></a>
+        <a href="LICENSE"><img alt="https://windowscraft76.fr/minicube/r/license/" src="https://img.shields.io/github/license/WindowsCraft76/MiniCube?style=for-the-badge"></a>
         <a href="https://www.python.org/downloads/release/python-3140/"><img alt="Python" src="https://img.shields.io/badge/python-3.14-blue?style=for-the-badge"></a>
-        <a href="https://ko-fi.com/X8X81VIGPB"><img alt="ko-fi" src="https://img.shields.io/badge/Support_me_on_Ko--fi-FF5A16?logo=ko-fi&logoColor=white&style=for-the-badge"></a>
+        <a href="http://kofi.windowscraft76.fr/"><img alt="ko-fi" src="https://img.shields.io/badge/Support_me_on_Ko--fi-FF5A16?logo=ko-fi&logoColor=white&style=for-the-badge"></a>
     </p>
     <p>
         <b>A lightweight and simple Minecraft launcher.</b><br>
-        🔗 Download the latest version <a href=https://github.com/WindowsCraft76/MiniCube/releases>HERE</a>!
+        🔗 Download the latest version <a href=https://windowscraft76.fr/minicube/r/downloadlast/>HERE</a>!
     </p>
 </div>
 

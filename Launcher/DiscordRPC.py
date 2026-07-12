@@ -1,7 +1,7 @@
 import time
 from pypresence import Presence
 from Config import CLIENT_ID_RPC, PAGE_URL
-from VersionsManager import get_info_version
+from VersionManager import get_info_version
 
 class DiscordRPC:
     def __init__(self, app=None):
@@ -15,10 +15,10 @@ class DiscordRPC:
         try:
             payload = {
                 "large_image": "logo_1024x1024",
-                "large_text": f"MiniCube - {get_info_version()}",
+                "large_text": f"{get_info_version()}",
                 "details": details,
                 "start": self.start_time,
-                "buttons": [{"label": "Download MiniCube", "url": f"{PAGE_URL}/releases"}]
+                "buttons": [{"label": "Download MiniCube", "url": f"{PAGE_URL}"}]
             }
 
             if small_image:

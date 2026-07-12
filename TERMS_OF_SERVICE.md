@@ -1,11 +1,10 @@
 # Terms of Service - MiniCube
 
-**Last updated:** 2026-06-20
+**Last updated:** 2026-07-12
 
 ## 1. Acceptance of Terms
 
-By downloading, installing, or using **MiniCube**, you agree to these
-Terms of Service.
+By downloading, installing, or using **MiniCube**, you agree to these Terms of Service.
 
 If you do not agree with these terms, you should stop using the software.
 
@@ -25,13 +24,13 @@ You agree not to use MiniCube to:
 
 ## 4. Disclaimer
 
-Additional information regarding warranties, liability, and other matters is provided in the separate document titled [**Disclaimer**](DISCLAIMER.md) (DISCLAIMER.md).
+Additional information regarding warranties, liability, and other matters is provided in the separate document titled [**Disclaimer**](https://windowscraft76.fr/minicube/r/disclaimer/).
 
-By using MiniCube, you acknowledge and accept the statements contained in the [Disclaimer](DISCLAIMER.md).
+By using MiniCube, you acknowledge and accept the statements contained in the [Disclaimer](https://windowscraft76.fr/minicube/r/disclaimer/).
 
 ## 5. Open-Source License
 
-MiniCube is distributed under the **MIT License**.
+MiniCube is distributed under the **MIT License** ([file](https://windowscraft76.fr/minicube/r/license/)).
 
 You may use, modify, and distribute the software according to the terms of that license.
 
