@@ -13,7 +13,7 @@
     </p>
     <p>
         <b>A lightweight and simple Minecraft launcher.</b><br>
-        🔗 Download the latest version <a href=https://windowscraft76.fr/minicube/r/downloadlast/>HERE</a>!
+        🔗 Download the latest version <a href="https://windowscraft76.fr/minicube/r/downloadlast/">HERE</a>!
     </p>
 </div>
 
@@ -58,6 +58,7 @@ If you want to modify or contribute to the project, install the required depende
 ```
 pip install -r requirements.txt
 ```
+Or you can use **Run and Debug** in Visual Studio Code to automatically install the required dependencies.
 
 ### 🐛 Debug Mode
 You can launch the application in debug mode by adding the `--debug` argument at the end of the launch command. For example:
@@ -65,6 +66,7 @@ You can launch the application in debug mode by adding the `--debug` argument at
 ```
 python.exe Main.py --debug
 ```
+Or you can use **Run and Debug** in Visual Studio Code to launch the application directly.
 
 ---
 
@@ -72,19 +74,19 @@ python.exe Main.py --debug
 
 Please read the project policies:
 
-* [Terms of Service](TERMS_OF_SERVICE.md)
-* [Privacy Policy](PRIVACY_POLICY.md)
-* [Disclaimer](DISCLAIMER.md)
+* [Terms of Service](https://windowscraft76.fr/minicube/r/terms/)
+* [Privacy Policy](https://windowscraft76.fr/minicube/r/privacy/)
+* [Disclaimer](https://windowscraft76.fr/minicube/r/disclaimer/)
 
 MiniCube is an independent Minecraft launcher.
 
 **This project is not affiliated with Mojang Studios or Microsoft.**\
 **Minecraft is a trademark of Mojang Studios.**
 
-If you have any questions, please contact me at the following email address: contact.wincraft76@gmail.com
+If you have any questions, you can ask them [here](https://windowscraft76.fr/minicube/r/discussions) or contact me directly at the following email address: contact@windowscraft76.fr
 
 ---
 
 ## 📄 License
 
-This project is distributed under the MIT license. See [here](LICENSE) for more details.
+This project is distributed under the MIT license. See [here](https://windowscraft76.fr/minicube/r/license) for more details.
