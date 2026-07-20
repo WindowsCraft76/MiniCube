@@ -1,6 +1,5 @@
 # Ignore Minecraft files/folders
 level.dat
-GameFile/
 logs/
 
 # Ignore the Python execution directory
@@ -14,9 +13,7 @@ settings.json
 accounts.json
 .salt
 
+GameFile/
 Data/
 Meta/
 Logs/
-
-# Ignore Visual Studio Code files/folders
-.vscode/
