@@ -31,12 +31,18 @@ It allows you to launch **any Minecraft version** while keeping the launcher min
 
 ## ✨ Features
 
-* Launch **any Minecraft version**
-* **Automatic version download**
-* **Microsoft account authentication**
-* **Discord Rich Presence**
-* Lightweight and simple interface
+* Launch any Minecraft version
+* Microsoft account authentication
+* Account management
+* Discord Rich Presence
+* Internal Java installation
+* Protection of personal data
+* Simple interface
+* Lightweight
 * Open-source
+* And others
+
+Future features will be added in upcoming updates.
 
 ---
 
@@ -51,6 +57,9 @@ Support for other operating systems may come in the future.
 ---
 
 ## 🛠️ Development Setup
+
+> [!WARNING]
+> If you are using Visual Studio Code, please make sure that there are no spaces in your file or folder names. Otherwise, you may encounter errors when using **Run and Debug**!
 
 ### 📦 Dependencies
 If you want to modify or contribute to the project, install the required dependencies:
