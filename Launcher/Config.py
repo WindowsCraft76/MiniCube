@@ -61,3 +61,10 @@ copyright = "Copyright (c) 2026 WindowsCraft76"
 
 REGISTRY_KEY_PATH   = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\MiniCube"
 REGISTRY_VALUE_NAME = "DisplayVersion"
+
+UPDATE_POPUP_MESSAGES = {
+    "release": "A new version is available! ({version})\n\nDo you want to open the download page?",
+    "hotfix": "A new patch version is available! ({version})\nIt is recommended to update as soon as possible.\n\nDo you want to open the download page?",
+    "beta": "A new beta version is available! ({version})\n\nDo you want to open the download page?",
+}
+UPDATE_POPUP_MESSAGE_DEFAULT = "A new version is available! ({version})\n\nDo you want to open the download page?"

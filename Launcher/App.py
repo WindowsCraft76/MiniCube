@@ -17,9 +17,15 @@ from Config import (
     VERSIONS_DIR, LIBRARIES_DIR, OBJECTS_DIR, JAVA_DIR, PAGE_URL,
     VERSION_MANIFEST_URL, RESSOURCE_MC_URL, API_AZUL_URL, NATIVES_DIR,
     TERMS_URL, PRIVACY_URL, DISCLAIMER_URL, ISSUES_URL, DOWNLOADLAST_URL,
-    copyright, CACHE_DIR
+    copyright, CACHE_DIR, UPDATE_POPUP_MESSAGES, UPDATE_POPUP_MESSAGE_DEFAULT
     )
-from VersionManager import check_for_update, get_update_page_url, get_local_version_type
+from VersionManager import (
+    check_for_update,
+    get_update_page_url,
+    get_local_version_type,
+    read_local_version,
+    format_local_version_for_display,
+)
 from DiscordRPC import DiscordRPC
 from SplashScreen import center_window
 
@@ -34,9 +40,13 @@ class App:
         self.log_text_win = None
         self.log_buffer = []
 
-        info = check_for_update()
-        local_display = info["local_display_version"]
-        local_version_type = get_local_version_type(info["local_raw_version"])
+        self._ui_ready = False
+        self._pending_update_version = None
+        self.root.bind("<Map>", self._on_first_map, add="+")
+
+        local_raw_version = read_local_version()
+        local_display = format_local_version_for_display(local_raw_version)
+        local_version_type = get_local_version_type(local_raw_version)
 
         style = ttk.Style()
         style.theme_use('default')
@@ -598,7 +608,15 @@ class App:
             self.log(f"Error loading settings!", "error")
 
     def save_settings(self):
-        data = {
+        data = {}
+        if SETTINGS_FILE.exists():
+            try:
+                with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except Exception:
+                data = {}
+
+        data.update({
             "username": self.username_var.get(),
             "ram": self.ram_var.get(),
             "show_snapshots": self.show_snapshots_var.get(),
@@ -606,7 +624,7 @@ class App:
             "discord_rpc": self.discord_rpc_var.get(),
             "default_account": self.default_account,
             "last_used_account": self.last_used_account
-        }
+        })
 
         try:
             with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
@@ -735,6 +753,7 @@ class App:
         local_display = info["local_display_version"]
         remote_display = info["remote_display_version"]
         remote_numeric = info["remote_version"]
+        remote_type = info["remote_type"]
 
         if self.debug:
             self.log(f"Info version:\nLocal version: {local_display}\nRemote version: {remote_display}", "debug")
@@ -750,7 +769,10 @@ class App:
 
         if info["update_available"]:
             self.log(f"Update available: {local_display} -> {remote_display} ({DOWNLOADLAST_URL})", "info")
-            self.root.after(0, lambda: self._add_update_toolbar_entry(remote_display))
+            self.root.after(
+                0,
+                lambda: self._add_update_toolbar_entry(remote_display, remote_numeric, remote_type),
+            )
         else:
             self.log(f"Launcher up to date ({local_display})", "info")
             self.root.after(0, self._remove_update_toolbar_entry)
@@ -800,13 +822,61 @@ class App:
             return None
         return None
 
-    def _add_update_toolbar_entry(self, remote_version):
-        update_page_url = get_update_page_url(remote_version)
+    def _on_first_map(self, event):
+        if self._ui_ready:
+            return
+        self._ui_ready = True
+        self.root.unbind("<Map>")
+        if self._pending_update_version:
+            remote_version, remote_numeric, remote_type = self._pending_update_version
+            self._pending_update_version = None
+            self._show_update_popup(remote_version, remote_numeric, remote_type)
+
+    def _add_update_toolbar_entry(self, remote_version, remote_numeric, remote_type):
         if self._find_toolbar_index_by_label(self.UPDATE_LABEL) is None:
+            update_page_url = get_update_page_url()
             self.toolbar.add_command(label=self.UPDATE_LABEL, command=lambda: webbrowser.open(update_page_url))
-            answer = messagebox.askyesno("New update available", f"The new version {remote_version} is available!\nDo you want to open the version page?")
-            if answer:
-                webbrowser.open(update_page_url)
+
+        if self._ui_ready:
+            self._show_update_popup(remote_version, remote_numeric, remote_type)
+        else:
+            self._pending_update_version = (remote_version, remote_numeric, remote_type)
+
+    def _show_update_popup(self, remote_version, remote_numeric, remote_type):
+        update_page_url = get_update_page_url()
+
+        message_template = UPDATE_POPUP_MESSAGES.get(remote_type.lower(), UPDATE_POPUP_MESSAGE_DEFAULT)
+        message = message_template.format(version=remote_version)
+
+        popup = tk.Toplevel(self.root)
+        popup.title("New update available!")
+        popup.iconbitmap(str(CONTENT / "icon" / "icon_64x64.ico"))
+        popup.resizable(False, False)
+        popup.transient(self.root)
+
+        tk.Label(
+            popup,
+            text=message,
+            justify="center"
+        ).pack(pady=(15, 10), padx=15)
+
+        btn_frame = tk.Frame(popup)
+        btn_frame.pack(pady=(0, 15), anchor="s", side="bottom")
+
+        def on_yes():
+            webbrowser.open(update_page_url)
+            popup.destroy()
+
+        def on_no():
+            popup.destroy()
+
+        tk.Button(btn_frame, text="Yes, open the download page", width=25, command=on_yes).pack(side="right", padx=(5, 25))
+        tk.Button(btn_frame, text="No, later", width=15, command=on_no).pack(side="right", padx=(25, 5))
+
+        popup.update_idletasks()
+        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - (popup.winfo_width() // 2)
+        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - (popup.winfo_height() // 2)
+        popup.geometry(f"+{x}+{y}")
 
     def _remove_update_toolbar_entry(self):
         idx = self._find_toolbar_index_by_label(self.UPDATE_LABEL)

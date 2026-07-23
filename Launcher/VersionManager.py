@@ -210,11 +210,14 @@ def check_for_update(beta_fallback: bool = True):
     local_raw_version = read_local_version()
     local_display_version = format_local_version_for_display(local_raw_version)
 
+    remote_type = "None"
     try:
         remote_numeric, suffix = _fetch_remote_data(beta_fallback=beta_fallback)
         remote_display_version = (
             f"v{remote_numeric}{suffix}" if remote_numeric else "No version found"
         )
+        if remote_numeric:
+            remote_type = SUFFIX_TO_TYPE.get(suffix, "release").capitalize()
         remote_numeric = remote_numeric or "No version found"
     except Exception as e:
         remote_numeric = f"Error fetching remote version: {e}"
@@ -227,6 +230,7 @@ def check_for_update(beta_fallback: bool = True):
         "local_display_version": local_display_version,
         "remote_version": remote_numeric,
         "remote_display_version": remote_display_version,
+        "remote_type": remote_type,
         "update_available": update_available,
         "is_first_install": is_first_install,
     }
