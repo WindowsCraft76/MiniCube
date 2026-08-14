@@ -1292,7 +1292,7 @@ class App:
             self.update_progress("Game running...")
             self.rpc.update(
                 details=f"Playing Minecraft {version_id}",
-                small_image=f"https://windowscraft76.fr/minicube/api?assets=steve_32x32.png" if self.is_offline_var.get() else f"https://mc-heads.net/avatar/{uuid}/32",
+                small_image=f"https://windowscraft76.fr/assets/minicube/steve_32x32.png" if self.is_offline_var.get() else f"https://mc-heads.net/avatar/{uuid}/32",
                 small_text=f"Playing offline as {active_user}" if self.is_offline_var.get() else f"Playing as {active_user}"
             )
             game_process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)

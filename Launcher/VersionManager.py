@@ -61,6 +61,12 @@ def strip_version_decorators(raw: str) -> str:
     return re.sub(r"[a-zA-Z]+$", "", s).strip()
 
 
+def type_to_suffix(version_type: str) -> str:
+    if not version_type:
+        return ""
+    return TYPE_SUFFIXES.get(version_type.lower(), "")
+
+
 def get_local_suffix(numeric_version: str) -> str:
     if not numeric_version:
         return ""
@@ -97,70 +103,74 @@ def format_local_version_for_display(numeric_version: str) -> str:
     return f"v{numeric_version}{get_local_suffix(numeric_version)}"
 
 
-def type_to_suffix(version_type: str) -> str:
-    if not version_type:
-        return ""
-    return TYPE_SUFFIXES.get(version_type.lower(), "")
-
 def get_info_version() -> str:
     raw_version = read_local_version()
     return format_local_version_for_display(raw_version)
 
-def _fetch_remote_data(beta_fallback: bool = True):
-    response = requests.get(
-        API_URL,
-        params={"query": "version"},
-        timeout=5,
-    )
+def _fetch_remote_catalog() -> dict:
+    response = requests.get(API_URL, params={"query": "version"}, timeout=5)
     response.raise_for_status()
     data = response.json()
+    return data if isinstance(data, dict) else {}
 
-    last = data.get("last", {})
+
+def _resolve_entry(catalog: dict, ref):
+    if not isinstance(ref, dict):
+        return None
+
+    raw_number = ref.get("version", "")
+    number = strip_version_decorators(raw_number)
+    if not number:
+        return None
+
+    versions = catalog.get("version", {})
+    if not isinstance(versions, dict):
+        versions = {}
+    info = versions.get(raw_number) or versions.get(number) or {}
+
+    version_type = info.get("type", "")
+    display = info.get("display") or f"v{number}{type_to_suffix(version_type)}"
+    return number, version_type, display
+
+
+def _last_entry(catalog: dict, beta_fallback: bool = True):
+    last = catalog.get("last", {})
     if not isinstance(last, dict):
-        return None, None
+        return None
 
-    has_release = bool(last.get("version"))
+    entry = _resolve_entry(catalog, last.get("release"))
+    if entry:
+        return entry
 
-    if has_release:
-        raw_number = last.get("version", "")
-        suffix = type_to_suffix(last.get("type", ""))
-    else:
-        if not beta_fallback:
-            return None, None
+    if beta_fallback:
+        return _resolve_entry(catalog, last.get("beta"))
 
-        last_beta = last.get("beta", {})
-        if not isinstance(last_beta, dict):
-            last_beta = {}
-
-        raw_number = last_beta.get("version", "")
-        suffix = type_to_suffix(last_beta.get("type", ""))
-
-    clean_number = strip_version_decorators(raw_number)
-    if not clean_number:
-        return None, None
-
-    return clean_number, suffix
+    return None
 
 
 def get_remote_version(beta_fallback: bool = True) -> str:
     try:
-        clean_number, _suffix = _fetch_remote_data(beta_fallback=beta_fallback)
-        if not clean_number:
+        catalog = _fetch_remote_catalog()
+        entry = _last_entry(catalog, beta_fallback)
+        if not entry:
             return "No version found"
-        return clean_number
+        return entry[0]
 
     except Exception as e:
         return f"Error fetching remote version: {e}"
+
 
 def get_remote_display_version(beta_fallback: bool = True) -> str:
     try:
-        clean_number, suffix = _fetch_remote_data(beta_fallback=beta_fallback)
-        if not clean_number:
+        catalog = _fetch_remote_catalog()
+        entry = _last_entry(catalog, beta_fallback)
+        if not entry:
             return "No version found"
-        return f"v{clean_number}{suffix}"
+        return entry[2]
 
     except Exception as e:
         return f"Error fetching remote version: {e}"
+
 
 def _parse_version(version_str: str):
     if not version_str:
@@ -206,19 +216,29 @@ def compare_versions(local_raw_version: str, remote_version: str):
 
     return False, False
 
+
 def check_for_update(beta_fallback: bool = True):
     local_raw_version = read_local_version()
-    local_display_version = format_local_version_for_display(local_raw_version)
+    local_key = strip_version_decorators(local_raw_version) or local_raw_version
 
     remote_type = "None"
+    local_display_version = format_local_version_for_display(local_raw_version)
+
     try:
-        remote_numeric, suffix = _fetch_remote_data(beta_fallback=beta_fallback)
-        remote_display_version = (
-            f"v{remote_numeric}{suffix}" if remote_numeric else "No version found"
-        )
-        if remote_numeric:
-            remote_type = SUFFIX_TO_TYPE.get(suffix, "release").capitalize()
-        remote_numeric = remote_numeric or "No version found"
+        catalog = _fetch_remote_catalog()
+        entry = _last_entry(catalog, beta_fallback)
+
+        if entry:
+            remote_numeric, version_type, remote_display_version = entry
+            remote_type = (version_type or "release").capitalize()
+        else:
+            remote_numeric = "No version found"
+            remote_display_version = "No version found"
+
+        local_entry = catalog.get("version", {}).get(local_key)
+        if isinstance(local_entry, dict) and local_entry.get("display"):
+            local_display_version = local_entry["display"]
+
     except Exception as e:
         remote_numeric = f"Error fetching remote version: {e}"
         remote_display_version = remote_numeric

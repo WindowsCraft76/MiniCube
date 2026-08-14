@@ -45,7 +45,7 @@ XBOX_XSTS_URL      = "https://xsts.auth.xboxlive.com/xsts/authorize"
 
 API_MCSERVICES_URL = "https://api.minecraftservices.com/"
 API_AZUL_URL       = "https://api.azul.com"
-API_URL            = "https://windowscraft76.fr/minicube/api"
+API_URL            = "https://windowscraft76.fr/minicube/api/v2"
 
 VERSION_MANIFEST_URL = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json"
 RESSOURCE_MC_URL     = "https://resources.download.minecraft.net"

@@ -14,7 +14,7 @@ class DiscordRPC:
             return
         try:
             payload = {
-                "large_image": "https://windowscraft76.fr/minicube/api?assets=logo_1024x1024.png",
+                "large_image": "https://windowscraft76.fr/assets/minicube/logo_1024x1024.png",
                 "large_text": f"{get_info_version()}",
                 "details": details,
                 "start": self.start_time,
