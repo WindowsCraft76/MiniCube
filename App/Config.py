@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-CONTENT       = Path(__file__).resolve().parent.parent / "Content"
+ASSETS        = Path(__file__).resolve().parent.parent / "Assets"
 BASE_DIR      = Path(os.path.expandvars(r"%appdata%")) / ".MiniCube"
 
 META_DIR      = BASE_DIR / "Meta"

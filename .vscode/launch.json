@@ -6,7 +6,7 @@
             "type": "debugpy",
             "request": "launch",
             "cwd": "${workspaceFolder}",
-            "program": "${workspaceFolder}\\Launcher\\Main.py",
+            "program": "${workspaceFolder}\\App\\Main.py",
             "console": "integratedTerminal",
             "args": ["--debug"],
             "python": "${command:python.interpreterPath}",
@@ -17,7 +17,7 @@
             "type": "debugpy",
             "request": "launch",
             "cwd": "${workspaceFolder}",
-            "program": "${workspaceFolder}\\Launcher\\Main.py",
+            "program": "${workspaceFolder}\\App\\Main.py",
             "console": "integratedTerminal",
             "python": "${command:python.interpreterPath}",
             "preLaunchTask": "Install MiniCube dependencies"

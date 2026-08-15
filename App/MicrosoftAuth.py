@@ -111,7 +111,7 @@ class MicrosoftAuth:
                 query = urllib.parse.parse_qs(parsed.query)
 
                 self.send_response(200)
-                self.send_header("Content-type", "text/html; charset=utf-8")
+                self.send_header("ASSETS-type", "text/html; charset=utf-8")
                 self.end_headers()
 
                 if "error" in query:

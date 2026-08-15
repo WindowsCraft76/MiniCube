@@ -13,7 +13,7 @@ from tkinter import ttk, messagebox
 from MicrosoftAuth import MicrosoftAuth
 from AccountManager import AccountManager
 from Config import (
-    CONTENT, INDEXES_DIR, GAME_DIR, ASSETS_DIR, SETTINGS_FILE,
+    ASSETS, INDEXES_DIR, GAME_DIR, ASSETS_DIR, SETTINGS_FILE,
     VERSIONS_DIR, LIBRARIES_DIR, OBJECTS_DIR, JAVA_DIR, PAGE_URL,
     VERSION_MANIFEST_URL, RESSOURCE_MC_URL, API_AZUL_URL, NATIVES_DIR,
     TERMS_URL, PRIVACY_URL, DISCLAIMER_URL, ISSUES_URL, DOWNLOADLAST_URL,
@@ -32,13 +32,19 @@ from SplashScreen import center_window
 _print_lock = threading.Lock()
 
 class App:
-    def __init__(self, root, rpc=None, debug=None):
+    def __init__(self, root, rpc=None, debug=None, instance_socket=None):
         self.root = root
         self.debug = debug
 
         self.log_window = None
         self.log_text_win = None
         self.log_buffer = []
+
+        self.game_process = None
+        self._hidden_in_background = False
+        self._instance_socket = instance_socket
+        if self._instance_socket:
+            threading.Thread(target=self._listen_for_instance_signal, daemon=True).start()
 
         self._ui_ready = False
         self._pending_update_version = None
@@ -56,7 +62,7 @@ class App:
             self.root.title("MiniCube")
         self.root.geometry("330x270")
         self.root.resizable(False, False)
-        self.root.iconbitmap(str(CONTENT / "icon" / "icon_64x64.ico"))
+        self.root.iconbitmap(str(ASSETS / "icon" / "icon_64x64.ico"))
 
         self.toolbar = tk.Menu(root)
         menu = tk.Menu(self.toolbar, tearoff=0)
@@ -65,8 +71,10 @@ class App:
         menu.add_command(label="Settings", command=self.toggle_settings_window)
         menu.add_command(label="Open folder", command=self.open_folder)
         menu.add_separator()
-        menu.add_command(label="Exit", command=lambda: [root.destroy()])
+        menu.add_command(label="Exit", command=self._on_close_request)
         self.toolbar.add_cascade(label="Menu", menu=menu)
+
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close_request)
 
         help = tk.Menu(self.toolbar, tearoff=0)
         help.add_command(
@@ -104,6 +112,7 @@ class App:
         self.show_snapshots_var = tk.BooleanVar(value=False)
         self.show_old_var = tk.BooleanVar(value=False)
         self.discord_rpc_var = tk.BooleanVar(value=True)
+        self.keep_open_var = tk.BooleanVar(value=True)
 
         self.download_thread = None
         self.cancel_download = False
@@ -162,6 +171,67 @@ class App:
 
         self.version_manifest = {}
 
+    def _listen_for_instance_signal(self):
+        while True:
+            try:
+                conn, _ = self._instance_socket.accept()
+            except OSError:
+                return
+            try:
+                data = conn.recv(16)
+                if data == b"SHOW":
+                    self.root.after(0, self._restore_window)
+            except Exception:
+                pass
+            finally:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+    def _restore_window(self):
+        try:
+            self._hidden_in_background = False
+            self.root.deiconify()
+            self.root.lift()
+            self.root.focus_force()
+            self.root.attributes("-topmost", True)
+            self.root.after(200, lambda: self.root.attributes("-topmost", False))
+        except Exception:
+            pass
+
+    def _minecraft_running(self):
+        return self.game_process is not None and self.game_process.poll() is None
+
+    def _on_close_request(self):
+        if self.keep_open_var.get() and self._minecraft_running():
+            self._hidden_in_background = True
+            self.root.withdraw()
+        else:
+            self._shutdown_app()
+
+    def _shutdown_app(self):
+        try:
+            self.save_settings()
+        except Exception:
+            pass
+        try:
+            if self.rpc:
+                self.rpc.stop_rpc()
+        except Exception:
+            pass
+        try:
+            if self._instance_socket:
+                self._instance_socket.close()
+        except Exception:
+            pass
+        if self.debug:
+            print("Closing!")
+        try:
+            self.root.destroy()
+        except Exception:
+            pass
+
     def toggle_settings_window(self):
         if getattr(self, "settings_window", None) and self.settings_window.winfo_exists():
             try:
@@ -178,8 +248,8 @@ class App:
         self.settings_window = tk.Toplevel(self.root)
         self.settings_window.title("Settings")
         self.settings_window.resizable(False, False)
-        self.settings_window.iconbitmap(str(CONTENT / "icon" / "icon_64x64.ico"))
-        center_window(self.settings_window, 350, 180)
+        self.settings_window.iconbitmap(str(ASSETS / "icon" / "icon_64x64.ico"))
+        center_window(self.settings_window, 350, 220)
 
         tk.Label(self.settings_window, text="RAM Memory (MB):").pack(pady=2)
 
@@ -189,6 +259,7 @@ class App:
 
         self._temp_show_old_var = tk.BooleanVar(value=self.show_old_var.get())
         self._temp_discord_rpc_var = tk.BooleanVar(value=self.discord_rpc_var.get())
+        self._temp_keep_open_var = tk.BooleanVar(value=self.keep_open_var.get())
 
         self.old_check = tk.Checkbutton(self.settings_window, text="Show historical versions", variable=self._temp_show_old_var)
         self.old_check.pack(pady=5)
@@ -199,6 +270,13 @@ class App:
             variable=self._temp_discord_rpc_var
         )
         self.discord_rpc_check.pack(pady=5)
+
+        self.keep_open_check = tk.Checkbutton(
+            self.settings_window,
+            text="Keep running in background while Minecraft is open",
+            variable=self._temp_keep_open_var
+        )
+        self.keep_open_check.pack(pady=5)
 
         btn_frame = tk.Frame(self.settings_window)
         btn_frame.pack(pady=(20, 5))
@@ -212,6 +290,7 @@ class App:
         if self._ui_locked:
             self.ram_spin.config(state="disabled")
             self.old_check.config(state="disabled")
+            self.keep_open_check.config(state="disabled")
 
         def _on_close():
             try:
@@ -252,7 +331,7 @@ class App:
         else:
             self.log_window = tk.Toplevel(self.root)
             self.log_window.title("Logs")
-            self.log_window.iconbitmap(str(CONTENT / "icon" / "icon_64x64.ico"))
+            self.log_window.iconbitmap(str(ASSETS / "icon" / "icon_64x64.ico"))
             self.log_window.geometry("600x300")
             self.log_window.protocol("WM_DELETE_WINDOW", self._on_close_log_window)
 
@@ -303,7 +382,7 @@ class App:
         
         self.acc_win = tk.Toplevel(self.root)
         self.acc_win.title("Accounts Manager")
-        self.acc_win.iconbitmap(str(CONTENT / "icon" / "icon_64x64.ico"))
+        self.acc_win.iconbitmap(str(ASSETS / "icon" / "icon_64x64.ico"))
         self.acc_win.resizable(False, False)
         center_window(self.acc_win, 300, 250)
 
@@ -358,7 +437,7 @@ class App:
         self.connecting_win.title("Connecting...")
         self.connecting_win.resizable(False, False)
         try:
-            self.connecting_win.iconbitmap(str(CONTENT / "icon" / "icon_64x64.ico"))
+            self.connecting_win.iconbitmap(str(ASSETS / "icon" / "icon_64x64.ico"))
         except Exception:
             pass
         center_window(self.connecting_win, 280, 90)
@@ -600,6 +679,7 @@ class App:
             self.show_snapshots_var.set(data.get("show_snapshots", False))
             self.show_old_var.set(data.get("show_old_versions", False))
             self.discord_rpc_var.set(data.get("discord_rpc", True))
+            self.keep_open_var.set(data.get("keep_open_if_minecraft_running", True))
             self.default_account = data.get("default_account")
             self.last_used_account = data.get("last_used_account")
 
@@ -622,6 +702,7 @@ class App:
             "show_snapshots": self.show_snapshots_var.get(),
             "show_old_versions": self.show_old_var.get(),
             "discord_rpc": self.discord_rpc_var.get(),
+            "keep_open_if_minecraft_running": self.keep_open_var.get(),
             "default_account": self.default_account,
             "last_used_account": self.last_used_account
         })
@@ -659,6 +740,7 @@ class App:
         self.show_snapshots_var.set(False)
         self.show_old_var.set(False)
         self.discord_rpc_var.set(True)
+        self.keep_open_var.set(True)
 
         if SETTINGS_FILE.exists():
             SETTINGS_FILE.unlink()
@@ -681,6 +763,7 @@ class App:
             new_show_snapshots = data.get("show_snapshots", False)
             new_show_old = data.get("show_old_versions", False)
             new_discord_rpc = data.get("discord_rpc", True)
+            new_keep_open = data.get("keep_open_if_minecraft_running", True)
 
             if self.show_snapshots_var.get() != new_show_snapshots:
                 self.show_snapshots_var.set(new_show_snapshots)
@@ -693,6 +776,9 @@ class App:
             if self.discord_rpc_var.get() != new_discord_rpc:
                 self.discord_rpc_var.set(new_discord_rpc)
                 self._apply_discord_rpc()
+
+            if self.keep_open_var.get() != new_keep_open:
+                self.keep_open_var.set(new_keep_open)
 
             self.log("Settings synced from file.", "info")
         except Exception as e:
@@ -710,6 +796,8 @@ class App:
         self.discord_rpc_var.set(self._temp_discord_rpc_var.get())
         if rpc_changed:
             self._apply_discord_rpc()
+
+        self.keep_open_var.set(self._temp_keep_open_var.get())
 
     def _apply_discord_rpc(self):
         if self.discord_rpc_var.get():
@@ -850,7 +938,7 @@ class App:
 
         popup = tk.Toplevel(self.root)
         popup.title("New update available!")
-        popup.iconbitmap(str(CONTENT / "icon" / "icon_64x64.ico"))
+        popup.iconbitmap(str(ASSETS / "icon" / "icon_64x64.ico"))
         popup.resizable(False, False)
         popup.transient(self.root)
 
@@ -1296,6 +1384,7 @@ class App:
                 small_text=f"Playing offline as {active_user}" if self.is_offline_var.get() else f"Playing as {active_user}"
             )
             game_process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            self.game_process = game_process
             self.root.after(0, lambda: self.launch_btn.config(state="disabled", text="Ready!"))
         except Exception as e:
             self.log(f"Unable to start Java process: {e}", "error")
@@ -1306,9 +1395,13 @@ class App:
         for line in iter(game_process.stdout.readline, ''):
             self.log(line.strip("\n"), "game")
         game_process.wait()
+        self.game_process = None
 
         self.root.after(0, lambda: self.launch_btn.config(text="Launch game"))
         self.root.after(0, lambda: self.set_ui_state(True))
         self.update_progress("Game closed")
         self.log("=== Game finished ===", "info")
         self.rpc.update(details="In the launcher")
+
+        if self._hidden_in_background:
+            self.root.after(0, self._restore_window)
