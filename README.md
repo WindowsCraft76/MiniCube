@@ -1,7 +1,7 @@
 <div align="center">
     <picture>
-        <source srcset="./ASSETS/github/banner_white_transparent_330x90.png" media="(prefers-color-scheme: dark)">
-        <source srcset="./ASSETS/github/banner_black_transparent_330x90.png" media="(prefers-color-scheme: light)">
+        <source srcset="./assets/github/banner_white_transparent_330x90.png" media="(prefers-color-scheme: dark)">
+        <source srcset="./assets/github/banner_black_transparent_330x90.png" media="(prefers-color-scheme: light)">
         <img src="" alt="Banner" width="330" height="90">
     </picture>
     <p>
