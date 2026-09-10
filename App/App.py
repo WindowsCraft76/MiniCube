@@ -1,6 +1,9 @@
 ﻿import os
+import re
 import json
-import urllib.request
+import hashlib
+import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import tkinter as tk
 import subprocess
 import threading
@@ -8,16 +11,19 @@ import time
 import webbrowser
 import zipfile
 import platform
+from collections import deque
 from pathlib import Path
 from tkinter import ttk, messagebox
 from MicrosoftAuth import MicrosoftAuth
 from AccountManager import AccountManager
+from ProfileManager import ProfileManager
 from Config import (
     ASSETS, INDEXES_DIR, GAME_DIR, ASSETS_DIR, SETTINGS_FILE,
     VERSIONS_DIR, LIBRARIES_DIR, OBJECTS_DIR, JAVA_DIR, PAGE_URL,
     VERSION_MANIFEST_URL, RESSOURCE_MC_URL, API_AZUL_URL, NATIVES_DIR,
-    TERMS_URL, PRIVACY_URL, DISCLAIMER_URL, ISSUES_URL, DOWNLOADLAST_URL,
-    copyright, CACHE_DIR, UPDATE_POPUP_MESSAGES, UPDATE_POPUP_MESSAGE_DEFAULT
+    TERMS_URL, PRIVACY_URL, DISCLAIMER_URL, ISSUES_URL, DOWNLOADLAST_URL, HELP_INSTALLED_VERSION_URL,
+    copyright, CACHE_DIR, UPDATE_POPUP_MESSAGES, UPDATE_POPUP_MESSAGE_DEFAULT, USER_AGENT,
+    LIBRARIES_MC_URL
     )
 from VersionManager import (
     check_for_update,
@@ -31,6 +37,9 @@ from SplashScreen import center_window
 
 _print_lock = threading.Lock()
 
+class _AbortLaunch(Exception):
+    pass
+
 class App:
     def __init__(self, root, rpc=None, debug=None, instance_socket=None):
         self.root = root
@@ -41,6 +50,9 @@ class App:
         self.log_buffer = []
 
         self.game_process = None
+        self._game_stop_requested = False
+        self._game_started_at = None
+        self._game_status_after_id = None
         self._hidden_in_background = False
         self._instance_socket = instance_socket
         if self._instance_socket:
@@ -49,6 +61,9 @@ class App:
         self._ui_ready = False
         self._pending_update_version = None
         self.root.bind("<Map>", self._on_first_map, add="+")
+
+        self.profile_var = tk.StringVar(value="vanilla")
+        self.installed_profiles_map = {}
 
         local_raw_version = read_local_version()
         local_display = format_local_version_for_display(local_raw_version)
@@ -76,13 +91,18 @@ class App:
 
         self.root.protocol("WM_DELETE_WINDOW", self._on_close_request)
 
+        profile_menu = tk.Menu(self.toolbar, tearoff=0)
+        profile_menu.add_radiobutton(label="Vanilla", variable=self.profile_var, value="vanilla", command=self._on_profile_changed)
+        profile_menu.add_radiobutton(label="Installed", variable=self.profile_var, value="installed", command=self._on_profile_changed)
+        self.toolbar.add_cascade(label="Profile", menu=profile_menu)
+
         help = tk.Menu(self.toolbar, tearoff=0)
         help.add_command(
             label="About",
             command=lambda:
             messagebox.showinfo(
             "About",
-            f"MiniCube\nCreated by WindowsCraft76\n\nVersion installed: {local_display} ({local_version_type})\nOperating system: {platform.system()}\nPython version: {platform.python_version()}\n\nThis is an open-source project under the MIT license.\nMiniCube is not affiliated with, endorsed by, or supported by Mojang Studios or Microsoft.\n\n{copyright}",
+            f"MiniCube\nCreated by WindowsCraft76\n\nVersion installed: {local_display} ({local_version_type})\nOperating system: {platform.platform()}\nPython version: {platform.python_version()} {platform.python_build()}\n\nThis is an open-source project under the MIT license.\nMiniCube is not affiliated with, endorsed by, or supported by Mojang Studios or Microsoft.\n\n{copyright}",
         ))
         help.add_command(label="Open page", command=lambda: webbrowser.open(PAGE_URL))
         help.add_separator()
@@ -107,7 +127,7 @@ class App:
             self.rpc.app = self
 
         self.username_var = tk.StringVar(value="Steve")
-        self.version_var = tk.StringVar()
+        self.version_var = tk.StringVar(value="Loading...")
         self.ram_var = tk.IntVar(value=2048)
         self.show_snapshots_var = tk.BooleanVar(value=False)
         self.show_old_var = tk.BooleanVar(value=False)
@@ -116,9 +136,18 @@ class App:
 
         self.download_thread = None
         self.cancel_download = False
+        self._cancel_event = threading.Event()
         self._ui_locked = False
 
+        self._http = requests.Session()
+        self._http.headers.update({"User-Agent": USER_AGENT})
+        adapter = requests.adapters.HTTPAdapter(pool_connections=16, pool_maxsize=16, max_retries=2)
+        self._http.mount("https://", adapter)
+        self._http.mount("http://", adapter)
+
         self.account_manager = AccountManager(app=self)
+        self.profile_manager = ProfileManager()
+        self.profile_manager.ensure_file()
         self.selected_account_var = tk.StringVar()
         self.is_offline_var = tk.BooleanVar(value=False)
         self.accounts_list = []
@@ -157,13 +186,15 @@ class App:
         self.refresh_accounts_ui()
 
         tk.Label(root, text="Version:").pack(pady=(0, 2))
-        self.version_menu = ttk.Combobox(root, textvariable=self.version_var, state="readonly")
+        self.version_menu = ttk.Combobox(root, textvariable=self.version_var, state="disabled", width=25)
         self.version_menu.pack(pady=(0, 0))
 
         self.snapshot_check = tk.Checkbutton(root, text="Show snapshots", variable=self.show_snapshots_var, command=self.refresh_version_list)
         self.snapshot_check.pack(pady=(3, 0))
+        self.snapshot_link = tk.Label(root, text="Don't know what to do? Click here!", fg="blue", cursor="hand2")
+        self.snapshot_link.bind("<Button-1>", lambda _event: webbrowser.open(HELP_INSTALLED_VERSION_URL))
 
-        self.launch_btn = tk.Button(root, text="Launch game", command=lambda: [ self.save_settings(), self.update_progress("Loading..."), self.launch_game()])
+        self.launch_btn = tk.Button(root, text="Play", command=self._on_launch_button, width=15, anchor="center")
         self.launch_btn.pack(pady=(20, 0))
 
         self.progress_label = tk.Label(root, text="Waiting...")
@@ -204,11 +235,41 @@ class App:
         return self.game_process is not None and self.game_process.poll() is None
 
     def _on_close_request(self):
-        if self.keep_open_var.get() and self._minecraft_running():
+        if self._minecraft_running() and self.keep_open_var.get():
             self._hidden_in_background = True
             self.root.withdraw()
         else:
             self._shutdown_app()
+
+    def _on_launch_button(self):
+        if self._minecraft_running():
+            self.stop_game()
+            return
+        self.save_settings()
+        self.update_progress("Starting...")
+        self.launch_game()
+
+    def _cancel_or_stop(self):
+        if self._minecraft_running():
+            self.stop_game()
+            return
+        if self.download_thread and self.download_thread.is_alive():
+            self.cancel_download = True
+            self._cancel_event.set()
+            self.log("Cancellation requested!", "warn")
+            self.update_progress("Canceling...")
+
+    def stop_game(self):
+        process = self.game_process
+        if not process or process.poll() is not None:
+            return
+        self.log(f"Stop requested for Java process! (PID {process.pid})", "warn")
+        self._game_stop_requested = True
+        self.update_progress("Stopping game...")
+        try:
+            process.terminate()
+        except OSError as error:
+            self.log(f"Unable to stop Java process: {error}", "error")
 
     def _shutdown_app(self):
         try:
@@ -287,10 +348,14 @@ class App:
         self.reset_btn = tk.Button(btn_frame, text="Reset settings", command=self.reset_settings)
         self.reset_btn.pack(side=tk.LEFT, padx=5)
 
+        self.repair_btn = tk.Button(btn_frame, text="Repair version", command=self._confirm_repair_selected_version)
+        self.repair_btn.pack(side=tk.LEFT, padx=5)
+
         if self._ui_locked:
             self.ram_spin.config(state="disabled")
             self.old_check.config(state="disabled")
             self.keep_open_check.config(state="disabled")
+            self.repair_btn.config(state="disabled")
 
         def _on_close():
             try:
@@ -304,6 +369,12 @@ class App:
                 except Exception:
                     pass
                 self.old_check = None
+            if getattr(self, "repair_btn", None):
+                try:
+                    self.repair_btn.destroy()
+                except Exception:
+                    pass
+                self.repair_btn = None
         
         self.settings_window.protocol("WM_DELETE_WINDOW", _on_close)
 
@@ -685,16 +756,26 @@ class App:
 
             self.log("Settings loaded!", "success")
         except Exception as e:
-            self.log(f"Error loading settings!", "error")
+            self.log(f"Error loading settings! {e}", "error")
+
+    def _load_settings_file(self):
+        if not SETTINGS_FILE.exists():
+            return {}
+        try:
+            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+
+    def _write_settings_file(self, data):
+        try:
+            with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=4)
+        except Exception as e:
+            self.log(f"Error saving settings: {e}", "error")
 
     def save_settings(self):
-        data = {}
-        if SETTINGS_FILE.exists():
-            try:
-                with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-            except Exception:
-                data = {}
+        data = self._load_settings_file()
 
         data.update({
             "username": self.username_var.get(),
@@ -707,32 +788,17 @@ class App:
             "last_used_account": self.last_used_account
         })
 
-        try:
-            with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=4)
-        except Exception as e:
-            self.log(f"Error saving settings: {e}", "error")
+        self._write_settings_file(data)
 
     def _update_account_prefs(self, **updates):
         for key, value in updates.items():
             setattr(self, key, value)
 
-        data = {}
-        if SETTINGS_FILE.exists():
-            try:
-                with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-            except Exception:
-                data = {}
-
+        data = self._load_settings_file()
         data["default_account"] = self.default_account
         data["last_used_account"] = self.last_used_account
 
-        try:
-            with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=4)
-        except Exception as e:
-            self.log(f"Error saving settings: {e}", "error")
+        self._write_settings_file(data)
 
     def reset_settings(self):
         self.username_var.set("Steve")
@@ -877,22 +943,38 @@ class App:
         threading.Thread(target=self._launch_sequence_worker, daemon=True).start()
 
     def _launch_sequence_worker(self):
-        try:
-            self.check_version_mismatch()
-        except Exception as e:
+        def run_update_check():
             try:
-                self.log(f"Error checking for updates! ({e})", "error")
-            except Exception:
-                pass
+                self.check_version_mismatch()
+            except Exception as e:
+                try:
+                    self.log(f"Error checking for updates! ({e})", "error")
+                except Exception:
+                    pass
 
-        try:
-            if self._fetch_version_manifest():
-                self.root.after(0, self._apply_version_list_to_ui)
-        except Exception as e:
+        def run_manifest_fetch():
             try:
-                self.log(f"Error loading versions! ({e})", "error")
-            except Exception:
-                pass
+                if self._fetch_version_manifest():
+                    self.root.after(0, self._apply_version_list_to_ui)
+                else:
+                    self.root.after(0, lambda: self._set_version_list([], error=True))
+            except Exception as e:
+                try:
+                    self.log(f"Error loading versions! ({e})", "error")
+                except Exception:
+                    pass
+                self.root.after(0, lambda: self._set_version_list([], error=True))
+
+        self.log("Starting up...", "info")
+        threads = [
+            threading.Thread(target=run_update_check, daemon=True),
+            threading.Thread(target=run_manifest_fetch, daemon=True),
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        self.log("Startup checks complete.", "info")
 
     def _find_toolbar_index_by_label(self, label):
         try:
@@ -974,18 +1056,115 @@ class App:
             except Exception:
                 pass
 
+    _VERSION_PLACEHOLDERS = ("Loading...", "No version found", "Error")
+
+    def _on_profile_changed(self):
+        self._sync_snapshot_check_state()
+        self.refresh_version_list()
+
+    def _sync_snapshot_check_state(self):
+        if self.profile_var.get() == "installed":
+            self.snapshot_check.pack_forget()
+            self.snapshot_link.pack(before=self.launch_btn, pady=(3, 0))
+        else:
+            self.snapshot_link.pack_forget()
+            if not self.snapshot_check.winfo_ismapped():
+                self.snapshot_check.pack(before=self.launch_btn, pady=(3, 0))
+            self.snapshot_check.config(state="disabled" if self._ui_locked else "normal")
+
+    def _sync_version_menu_state(self):
+        if self.version_var.get() in self._VERSION_PLACEHOLDERS:
+            self.version_menu.config(state="disabled")
+        else:
+            self.version_menu.config(state="disabled" if self._ui_locked else "readonly")
+
+    @staticmethod
+    def _is_valid_jar(path):
+        return path.is_file() and path.stat().st_size > 0 and zipfile.is_zipfile(path)
+
+    @staticmethod
+    def _has_sha1(path, expected_hash):
+        if not path.is_file() or path.stat().st_size == 0:
+            return False
+        digest = hashlib.sha1()
+        with open(path, "rb") as data_file:
+            for chunk in iter(lambda: data_file.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest() == expected_hash
+
+    def _is_valid_asset(self, path, expected_hash):
+        return self._has_sha1(path, expected_hash)
+
+    def _load_json_file(self, path, url=None, expected_hash=None, force=False):
+        valid = path.is_file() and not force
+        if valid and expected_hash:
+            valid = self._has_sha1(path, expected_hash)
+        if valid:
+            try:
+                with open(path, "r", encoding="utf-8") as data_file:
+                    return json.load(data_file)
+            except (OSError, json.JSONDecodeError):
+                valid = False
+
+        if not url:
+            raise ValueError(f"Invalid JSON file: {path}")
+        self._download_file(url, path)
+        with open(path, "r", encoding="utf-8") as data_file:
+            data = json.load(data_file)
+        if expected_hash and not self._has_sha1(path, expected_hash):
+            path.unlink(missing_ok=True)
+            raise ValueError(f"SHA-1 mismatch for JSON file: {path}")
+        return data
+
+    def _set_version_list(self, values, error=False):
+        self.version_menu["values"] = values
+        if values and not error:
+            self.version_var.set(values[0])
+        elif not error:
+            self.version_var.set("No version found")
+        else:
+            self.version_var.set("Error")
+        self._sync_version_menu_state()
+
     def refresh_version_list(self):
+        if self.profile_var.get() == "installed":
+            self._apply_installed_version_list()
+            return
+
         if self._fetch_version_manifest():
             self._apply_version_list_to_ui()
+        else:
+            self._set_version_list([], error=True)
+
+    def _apply_installed_version_list(self):
+        try:
+            profiles = self.profile_manager.get_all_profiles()
+        except Exception as e:
+            self.log(f"Error loading installed profiles! {e}", "error")
+            self._set_version_list([], error=True)
+            return
+
+        self.installed_profiles_map = {
+            profile.get("lastVersionId", key): profile.get("lastVersionId", key)
+            for key, profile in profiles.items()
+            if profile.get("type") == "custom"
+        }
+
+        self._set_version_list(list(self.installed_profiles_map.keys()))
+
+    def _get_selected_version_id(self):
+        if self.profile_var.get() == "installed":
+            return self.installed_profiles_map.get(self.version_var.get())
+        return self.version_var.get()
 
     def _fetch_version_manifest(self) -> bool:
         self.log("Fetching version manifest...", "info")
 
         try:
-            urllib.request.urlretrieve(VERSION_MANIFEST_URL, VERSIONS_DIR / "version_manifest.json")
+            self._urlretrieve(VERSION_MANIFEST_URL, VERSIONS_DIR / "version_manifest.json")
             with open(VERSIONS_DIR / "version_manifest.json", "r", encoding="utf-8") as f:
                 self.version_manifest = json.load(f)
-            self.log("Version manifest fetched successfully!", "success")
+            self.log(f"Version manifest fetched successfully! ({len(self.version_manifest.get('versions', []))} versions available)", "success")
             return True
         except Exception as e:
             self.root.after(0, lambda: messagebox.showerror("Error", "Unable to fetch manifest! See logs for details."))
@@ -1006,9 +1185,7 @@ class App:
         items.sort(key=lambda v: v["releaseTime"], reverse=True)
         version_ids = [v["id"] for v in items]
 
-        self.version_menu["values"] = version_ids
-        if version_ids:
-            self.version_var.set(version_ids[0])
+        self._set_version_list(version_ids)
 
     def open_folder(self):
         folder_path = GAME_DIR
@@ -1028,13 +1205,13 @@ class App:
         combo_state = "readonly" if enabled else "disabled"
 
         self.account_menu.config(state=combo_state)
-        self.version_menu.config(state=combo_state)
+        self._sync_version_menu_state()
 
         self.offline_entry.config(state=normal_state)
         self.offline_check.config(state=normal_state)
-        self.snapshot_check.config(state=normal_state)
+        self._sync_snapshot_check_state()
         if enabled:
-            self.launch_btn.config(state="normal")
+            self.launch_btn.config(state="normal", text="Play")
 
         if hasattr(self, "ram_spin") and self.ram_spin.winfo_exists():
             self.ram_spin.config(state=normal_state)
@@ -1042,9 +1219,37 @@ class App:
         if hasattr(self, "old_check") and self.old_check and self.old_check.winfo_exists():
             self.old_check.config(state=normal_state)
 
+        if hasattr(self, "keep_open_check") and self.keep_open_check.winfo_exists():
+            self.keep_open_check.config(state=normal_state)
+
+        if hasattr(self, "repair_btn") and self.repair_btn and self.repair_btn.winfo_exists():
+            self.repair_btn.config(state=normal_state)
+
+        profile_menu_index = self._find_toolbar_index_by_label("Profile")
+        if profile_menu_index is not None:
+            self.toolbar.entryconfig(profile_menu_index, state=normal_state)
+
     def update_progress(self, text=""):
         if text:
-            self.progress_label.config(text=text)
+            self.root.after(0, lambda: self.progress_label.config(text=text))
+
+    def _update_game_status(self):
+        if self._game_started_at is None:
+            return
+        elapsed = self.format_duration(time.monotonic() - self._game_started_at)
+        self.update_progress(f"Game in progress - {elapsed}")
+        self._game_status_after_id = self.root.after(1000, self._update_game_status)
+
+    def _stop_game_status_timer(self):
+        if self._game_status_after_id is not None:
+            try:
+                self.root.after_cancel(self._game_status_after_id)
+            except tk.TclError:
+                pass
+            self._game_status_after_id = None
+
+    def _set_launch_button(self, text, state="normal"):
+        self.root.after(0, lambda: self.launch_btn.config(text=text, state=state))
 
     def format_duration(self, seconds: float) -> str:
         secs = int(max(0, round(seconds)))
@@ -1059,7 +1264,10 @@ class App:
             return f"{m}m{s:02d}s"
         return f"{secs}s"
 
-    def prepare_version(self, version_id):
+    def prepare_version(self, version_id, force=False):
+        self.log(f"Preparing to repair Minecraft {version_id}..." if force else f"Preparing Minecraft {version_id}...", "info")
+        self.update_progress(f"Repairing..." if force else f"Preparing...")
+
         version_info = next(v for v in self.version_manifest["versions"] if v["id"] == version_id)
         version_dir = VERSIONS_DIR / version_id
         version_dir.mkdir(parents=True, exist_ok=True)
@@ -1067,80 +1275,359 @@ class App:
         version_json_path = version_dir / f"{version_id}.json"
         version_jar_path = version_dir / f"{version_id}.jar"
 
-        if not version_json_path.exists():
-            urllib.request.urlretrieve(version_info["url"], version_json_path)
-            self.log(f"Downloaded {version_id}.json", "success")
+        version_data = self._load_json_file(
+            version_json_path,
+            version_info["url"],
+            version_info.get("sha1"),
+            force=force,
+        )
+        version_data = self._resolve_version_data(version_id, version_data)
 
-        with open(version_json_path, "r", encoding="utf-8") as f:
-            version_data = json.load(f)
-
-        if not version_jar_path.exists():
-            client_url = version_data["downloads"]["client"]["url"]
-            tmp_path = version_dir / "client.jar"
-            urllib.request.urlretrieve(client_url, tmp_path)
-            tmp_path.rename(version_jar_path)
-            self.log(f"Downloaded {version_id}.jar", "success")
+        if force or not self._is_valid_jar(version_jar_path):
+            self._download_version_jar(version_id, version_data, version_jar_path)
 
         asset_index_id = version_data["assetIndex"]["id"]
         asset_index_url = version_data["assetIndex"]["url"]
         asset_index_path = INDEXES_DIR / f"{asset_index_id}.json"
-        if not asset_index_path.exists():
-            urllib.request.urlretrieve(asset_index_url, asset_index_path)
-            self.log(f"Downloaded {asset_index_id}.json", "success")
-
-        with open(asset_index_path, "r", encoding="utf-8") as f:
-            asset_index = json.load(f)
+        asset_index = self._load_json_file(
+            asset_index_path,
+            asset_index_url,
+            version_data["assetIndex"].get("sha1"),
+            force=force,
+        )
         objects = asset_index.get("objects", {})
 
+        if not self._download_version_files(version_data, objects, force=force):
+            return None, None
+
+        return version_data, version_jar_path
+
+    def _download_version_files(self, version_data, objects, force=False):
         tasks = []
-        for lib in version_data.get("libraries", []):
-            downloads = lib.get("downloads")
-            if not downloads:
+        for path, url in self._iter_library_artifacts(version_data):
+            if not url:
                 continue
-            artifact = downloads.get("artifact")
-            if artifact:
-                path = artifact["path"]
-                url = artifact["url"]
-                lib_path = LIBRARIES_DIR / path
-                tasks.append(("lib", lib_path, url))
-            classifiers = downloads.get("classifiers", {})
-            for classifier in classifiers.values():
-                path = classifier["path"]
-                url = classifier["url"]
-                lib_path = LIBRARIES_DIR / path
+            lib_path = LIBRARIES_DIR / path
+            if force or not self._is_valid_jar(lib_path):
                 tasks.append(("lib", lib_path, url))
         for name, obj in objects.items():
             hash_val = obj["hash"]
             subdir = hash_val[:2]
             url = f"{RESSOURCE_MC_URL}/{subdir}/{hash_val}"
             obj_path = OBJECTS_DIR / subdir / hash_val
-            tasks.append(("asset", obj_path, url))
+            if force or not self._is_valid_asset(obj_path, hash_val):
+                tasks.append(("asset", obj_path, url))
+
+        if not tasks:
+            self.log("Libraries and assets already up to date, nothing to download.", "info")
+            return True
+
+        total = len(tasks)
+        lib_count = sum(1 for kind, _, _ in tasks if kind == "lib")
+        asset_count = total - lib_count
+        self.log(
+            f"Downloading {total} missing file{'s' if total != 1 else ''} "
+            f"({lib_count} librar{'y' if lib_count == 1 else 'ies'}, {asset_count} asset{'s' if asset_count != 1 else ''})...",
+            "info"
+        )
+        self.update_progress("Downloading files...")
 
         done = 0
-        total = len(tasks)
+        errors = []
+        progress_lock = threading.Lock()
         start_time = time.time()
-        for kind, path, url in tasks:
-            if self.cancel_download:
-                self.log("Download canceled!", "info")
-                self.update_progress("Download canceled")
-                return None, None
-            path.parent.mkdir(parents=True, exist_ok=True)
-            if path.exists():
-                self.log(f"{kind.capitalize()} already exists, skipping: {path.name}", "info")
-            else:
-                try:
-                    urllib.request.urlretrieve(url, path)
-                    self.log(f"Downloaded {kind}: {path.name}", "success")
-                except Exception as e:
-                    self.log(f"Error downloading {url}: {e}", "error")
-            done += 1
-            elapsed = time.time() - start_time
-            speed = done / elapsed if elapsed > 0 else 0
-            remaining = (total - done) / speed if speed > 0 else 0
-            remaining_str = self.format_duration(remaining)
-            self.update_progress(f"{done}/{total} files - remaining {remaining_str}")
 
-        self.update_progress("Download finished!")
+        def download_one(task):
+            kind, path, url = task
+            if self._cancel_event.is_set():
+                return
+            path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                self._download_file(url, path)
+                self.log(f"Downloaded {kind}: {path.name}", "success")
+            except Exception as e:
+                self.log(f"Error downloading {url}: {e}", "error")
+                with progress_lock:
+                    errors.append(url)
+                return
+
+            nonlocal done
+            with progress_lock:
+                done += 1
+                elapsed = time.time() - start_time
+                speed = done / elapsed if elapsed > 0 else 0
+                remaining = (total - done) / speed if speed > 0 else 0
+                remaining_str = self.format_duration(remaining)
+                self.update_progress(f"Downloading files: {done}/{total} ({remaining_str} left)")
+
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            futures = [executor.submit(download_one, task) for task in tasks]
+            for _ in as_completed(futures):
+                pass
+
+        if self._cancel_event.is_set():
+            self.log("File download canceled by user.", "info")
+            self.update_progress("Download canceled")
+            return False
+
+        if errors:
+            self.log(f"{len(errors)} file(s) failed to download, see above for details.", "error")
+            self.update_progress(f"{len(errors)} file(s) failed to download!")
+            return False
+
+        elapsed_str = self.format_duration(time.time() - start_time)
+        self.log(f"All {total} files downloaded successfully in {elapsed_str}.", "success")
+        self.update_progress("Download complete!")
+        return True
+
+    def _fetch_json(self, url):
+        if self._cancel_event.is_set():
+            raise _AbortLaunch()
+        response = self._http.get(url, timeout=30)
+        response.raise_for_status()
+        if self._cancel_event.is_set():
+            raise _AbortLaunch()
+        return response.json()
+
+    def _urlretrieve(self, url, dest_path):
+        with self._http.get(url, stream=True, timeout=30) as response:
+            response.raise_for_status()
+            with open(dest_path, "wb") as out_file:
+                for chunk in response.iter_content(chunk_size=131072):
+                    if self._cancel_event.is_set():
+                        raise _AbortLaunch()
+                    if chunk:
+                        out_file.write(chunk)
+
+    def _download_file(self, url, path):
+        if self._cancel_event.is_set():
+            raise _AbortLaunch()
+        temp_path = path.with_name(f"{path.name}.part")
+        temp_path.unlink(missing_ok=True)
+        try:
+            self._urlretrieve(url, temp_path)
+            if not temp_path.is_file() or temp_path.stat().st_size == 0:
+                raise IOError(f"Downloaded file is empty: {url}")
+            temp_path.replace(path)
+        finally:
+            temp_path.unlink(missing_ok=True)
+
+    def _download_version_jar(self, version_id, version_data, version_jar_path):
+        client = version_data.get("downloads", {}).get("client")
+        if client and client.get("url"):
+            self._download_file(client["url"], version_jar_path)
+            self.log(f"Downloaded {version_id}.jar", "success")
+            return
+
+        for relative_path, url in self._iter_library_artifacts(version_data):
+            if not url:
+                continue
+            artifact_name = Path(relative_path).stem
+            if version_id.lower() in artifact_name.lower() or "loader" in artifact_name.lower():
+                self._download_file(url, version_jar_path)
+                self.log(f"Downloaded {version_id}.jar from mod loader artifact", "success")
+                return
+
+        raise FileNotFoundError(f"No client or mod loader JAR found for {version_id}")
+
+    def _resolve_version_data(self, version_id, version_data, _seen=None):
+        parent_id = version_data.get("inheritsFrom")
+        if not parent_id:
+            return version_data
+
+        _seen = _seen or set()
+        if parent_id in _seen:
+            return version_data
+        _seen.add(version_id)
+
+        parent_json_path = VERSIONS_DIR / parent_id / f"{parent_id}.json"
+        version_info = next(
+            (v for v in self.version_manifest.get("versions", []) if v["id"] == parent_id),
+            None
+        )
+        if version_info is None:
+            raise FileNotFoundError(f"Parent version {parent_id} not found locally or in the manifest")
+        parent_json_path.parent.mkdir(parents=True, exist_ok=True)
+        parent_data = self._load_json_file(
+            parent_json_path,
+            version_info["url"],
+            version_info.get("sha1"),
+        )
+        parent_data = self._resolve_version_data(parent_id, parent_data, _seen)
+
+        merged = dict(parent_data)
+        merged.update({k: v for k, v in version_data.items() if k not in ("libraries", "arguments")})
+        merged["libraries"] = version_data.get("libraries", []) + parent_data.get("libraries", [])
+
+        parent_args = parent_data.get("arguments")
+        child_args = version_data.get("arguments")
+        if parent_args or child_args:
+            parent_args = parent_args or {}
+            child_args = child_args or {}
+            merged["arguments"] = {
+                "game": parent_args.get("game", []) + child_args.get("game", []),
+                "jvm": parent_args.get("jvm", []) + child_args.get("jvm", []),
+            }
+        return merged
+
+    def load_local_version_data(self, version_id, force=False, check_dependencies=True):
+        version_dir = VERSIONS_DIR / version_id
+        version_json_path = version_dir / f"{version_id}.json"
+        version_jar_path = version_dir / f"{version_id}.jar"
+
+        if not check_dependencies:
+            with open(version_json_path, "r", encoding="utf-8") as data_file:
+                version_data = json.load(data_file)
+            version_data = self._resolve_local_version_data(version_id, version_data)
+            return version_data, version_jar_path
+
+        version_dir.mkdir(parents=True, exist_ok=True)
+
+        version_url = None
+        version_sha1 = None
+        if force or not version_json_path.is_file():
+            version_info = next(
+                (v for v in self.version_manifest.get("versions", []) if v["id"] == version_id),
+                None
+            )
+            if version_info is None:
+                if not version_json_path.is_file():
+                    raise FileNotFoundError(f"Version {version_id} not found in the manifest")
+            else:
+                version_url = version_info["url"]
+                version_sha1 = version_info.get("sha1")
+
+        version_data = self._load_json_file(version_json_path, version_url, version_sha1, force=force and version_url is not None)
+        version_data = self._resolve_version_data(version_id, version_data)
+
+        if not self._is_valid_jar(version_jar_path) and check_dependencies:
+            self._download_version_jar(version_id, version_data, version_jar_path)
+
+        if not self._is_valid_jar(version_jar_path):
+            raise IOError(f"Invalid or empty version JAR: {version_jar_path}")
+
+        if not check_dependencies:
+            return version_data, version_jar_path
+
+        asset_index_id = version_data["assetIndex"]["id"]
+        asset_index_path = INDEXES_DIR / f"{asset_index_id}.json"
+        asset_index_url = version_data["assetIndex"]["url"]
+        asset_index = self._load_json_file(
+            asset_index_path,
+            asset_index_url,
+            version_data["assetIndex"].get("sha1"),
+        )
+        objects = asset_index.get("objects", {})
+
+        if not self._download_version_files(version_data, objects, force=force):
+            raise _AbortLaunch()
+
+        return version_data, version_jar_path
+
+    def _resolve_local_version_data(self, version_id, version_data, _seen=None):
+        parent_id = version_data.get("inheritsFrom")
+        if not parent_id:
+            return version_data
+
+        _seen = _seen or set()
+        if parent_id in _seen:
+            return version_data
+        _seen.add(version_id)
+
+        parent_path = VERSIONS_DIR / parent_id / f"{parent_id}.json"
+        with open(parent_path, "r", encoding="utf-8") as data_file:
+            parent_data = json.load(data_file)
+        parent_data = self._resolve_local_version_data(parent_id, parent_data, _seen)
+
+        merged = dict(parent_data)
+        merged.update({k: v for k, v in version_data.items() if k not in ("libraries", "arguments")})
+        merged["libraries"] = version_data.get("libraries", []) + parent_data.get("libraries", [])
+
+        parent_args = parent_data.get("arguments")
+        child_args = version_data.get("arguments")
+        if parent_args or child_args:
+            parent_args = parent_args or {}
+            child_args = child_args or {}
+            merged["arguments"] = {
+                "game": parent_args.get("game", []) + child_args.get("game", []),
+                "jvm": parent_args.get("jvm", []) + child_args.get("jvm", []),
+            }
+        return merged
+
+    def _maven_name_to_path(self, name, extension="jar"):
+        parts = name.split(":")
+        if len(parts) < 3:
+            return None
+        group, artifact, version = parts[0], parts[1], parts[2]
+        filename = f"{artifact}-{version}"
+        if len(parts) > 3:
+            filename += f"-{parts[3]}"
+        filename += f".{extension}"
+        return f"{group.replace('.', '/')}/{artifact}/{version}/{filename}"
+
+    def _iter_library_artifacts(self, version_data):
+        for lib in version_data.get("libraries", []):
+            if not self._rules_allow(lib.get("rules")):
+                continue
+
+            downloads = lib.get("downloads")
+            if downloads:
+                artifact = downloads.get("artifact")
+                if artifact:
+                    yield artifact["path"], artifact.get("url")
+                for classifier in downloads.get("classifiers", {}).values():
+                    yield classifier["path"], classifier.get("url")
+                continue
+
+            name = lib.get("name")
+            if not name:
+                continue
+            relative_path = self._maven_name_to_path(name)
+            if not relative_path:
+                continue
+            base_url = lib.get("url") or LIBRARIES_MC_URL
+            if not base_url.endswith("/"):
+                base_url += "/"
+            yield relative_path, base_url + relative_path
+
+    def _missing_libraries(self, version_data):
+        return [
+            path for path, _ in self._iter_library_artifacts(version_data)
+            if not self._is_valid_jar(LIBRARIES_DIR / path)
+        ]
+
+    def _is_installed_profile(self):
+        return self.profile_var.get() == "installed"
+
+    def _get_version_ready(self, version_id, force=False):
+        is_installed_profile = self._is_installed_profile()
+
+        if is_installed_profile:
+            self.log(f"Initializing Installed version {version_id}...", "info")
+            version_data, version_jar_path = self.load_local_version_data(
+                version_id, force=force, check_dependencies=True
+            )
+            self.profile_manager.create_or_update(version_id, profile_type="custom")
+            return version_data, version_jar_path
+
+        if not force and self.profile_manager.has_profile(version_id):
+            version_data, version_jar_path = self.load_local_version_data(
+                version_id, check_dependencies=False
+            )
+            self.profile_manager.create_or_update(version_id)
+            return version_data, version_jar_path
+
+        version_data, version_jar_path = self.prepare_version(version_id, force=force)
+
+        if version_data is None:
+            raise _AbortLaunch()
+
+        missing = self._missing_libraries(version_data)
+        if missing:
+            raise FileNotFoundError(f"{len(missing)} missing librar{'y' if len(missing) == 1 else 'ies'}")
+
+        self.profile_manager.create_or_update(version_id)
+
         return version_data, version_jar_path
 
     def ensure_java_installed(self, major_version: int):
@@ -1169,8 +1656,7 @@ class App:
             "&javafx_bundled=false"
         )
 
-        with urllib.request.urlopen(api_url) as resp:
-            packages = json.load(resp)
+        packages = self._fetch_json(api_url)
 
         if not packages:
             raise Exception(f"No Java package found for Java {major_version}")
@@ -1180,8 +1666,12 @@ class App:
         zip_name = Path(download_url).name
         zip_path = JAVA_DIR / zip_name
 
-        urllib.request.urlretrieve(download_url, zip_path)
+        self.log(f"Downloading {zip_name}...", "info")
+        self._urlretrieve(download_url, zip_path)
+        self.log(f"Downloaded {zip_name}", "success")
 
+        self.update_progress("Extracting Java...")
+        self.log(f"Extracting Java {major_version}...", "info")
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall(JAVA_DIR)
 
@@ -1198,28 +1688,51 @@ class App:
             javaw = item / "bin" / "javaw.exe"
             if javaw.exists():
                 self.log(f"Java {major_version} installed successfully!", "success")
+                self.update_progress("Java installed!")
                 return javaw
 
         raise Exception(f"No Java package found for Java {major_version}")
+
+    def _current_os_name(self):
+        system = platform.system().lower()
+        if system.startswith("win"):
+            return "windows"
+        if system.startswith("linux"):
+            return "linux"
+        if system.startswith("darwin"):
+            return "osx"
+        raise Exception(f"Unsupported OS: {system}")
+
+    def _rules_allow(self, rules):
+        if not rules:
+            return True
+        allowed = False
+        for rule in rules:
+            if rule.get("features"):
+                continue
+            action_allow = rule.get("action", "allow") == "allow"
+            os_rule = rule.get("os")
+            if os_rule:
+                name = os_rule.get("name")
+                if name and name != self._current_os_name():
+                    continue
+                arch = os_rule.get("arch")
+                if arch and arch not in (platform.machine().lower(), platform.machine()):
+                    continue
+            allowed = action_allow
+        return allowed
 
     def extract_natives(self, version_data):
 
         version_id = version_data["id"]
         natives_dir = NATIVES_DIR / version_id
 
-        system = platform.system().lower()
-        if system.startswith("win"):
-            os_name = "windows"
-        elif system.startswith("linux"):
-            os_name = "linux"
-        elif system.startswith("darwin"):
-            os_name = "osx"
-        else:
-            raise Exception(f"Unsupported OS: {system}")
+        os_name = self._current_os_name()
 
         self.log(f"Extracting natives for {version_id}...", "info")
         self.update_progress("Extracting natives...")
 
+        extracted_count = 0
         for lib in version_data.get("libraries", []):
             natives = lib.get("natives")
             downloads = lib.get("downloads")
@@ -1247,24 +1760,267 @@ class App:
                         if member.startswith("META-INF/"):
                             continue
                         z.extract(member, natives_dir)
+                extracted_count += 1
             except Exception as e:
                 self.log(f"Failed to extract natives from {jar_path}: {e}", "error")
 
-        self.log(f"Natives successfully extracted!", "success")
+        if extracted_count:
+            self.log(f"Natives successfully extracted! ({extracted_count} librar{'y' if extracted_count == 1 else 'ies'})", "success")
+        else:
+            self.log("No natives needed extraction for this version/OS.", "info")
 
         return natives_dir
 
-    def launch_game(self):
+    def _build_debug_report(self, error, app_info=None):
+        lines = ["Information details:"]
+        lines.append(f"     OS: {platform.platform()}")
+        lines.append(f"     Python: {platform.python_version()}")
+        if app_info:
+            for key, value in app_info.items():
+                lines.append(f"     {key}: {value}")
+        lines.append("")
+        lines.append("Error:")
+        lines.append(f"     {error}")
+        return "\n".join(lines)
+
+    def _open_with_default_app(self, path):
+        try:
+            system = platform.system().lower()
+            if system.startswith("win"):
+                os.startfile(str(path))
+            elif system.startswith("darwin"):
+                subprocess.Popen(["open", str(path)])
+            else:
+                subprocess.Popen(["xdg-open", str(path)])
+        except Exception as e:
+            self.log(f"Unable to open {path}: {e}", "error")
+
+    def _copy_to_clipboard(self, text):
+        try:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(text)
+        except Exception as e:
+            self.log(f"Unable to copy to clipboard: {e}", "error")
+
+    def _show_launch_error_dialog(self, title, summary, details="", report_path=None):
+        result = {"choice": "cancel"}
+        event = threading.Event()
+
+        def build():
+            dialog = tk.Toplevel(self.root)
+            dialog.title(title)
+            dialog.transient(self.root)
+            dialog.grab_set()
+            dialog.resizable(False, False)
+            try:
+                dialog.iconbitmap(str(ASSETS / "icon" / "icon_64x64.ico"))
+            except Exception:
+                pass
+
+            tk.Label(
+                dialog, text=summary, wraplength=440, justify="left",
+                font=("Segoe UI", 10, "bold")
+            ).pack(padx=15, pady=(15, 5), anchor="w")
+
+            if details:
+                frame = tk.Frame(dialog)
+                frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=5)
+                frame.columnconfigure(0, weight=1)
+                frame.rowconfigure(0, weight=1)
+
+                text_widget = tk.Text(frame, height=12, width=64, bg="black", fg="white", wrap="none")
+                vbar = tk.Scrollbar(frame, orient="vertical", command=text_widget.yview)
+                hbar = tk.Scrollbar(frame, orient="horizontal", command=text_widget.xview)
+                text_widget.config(yscrollcommand=vbar.set, xscrollcommand=hbar.set)
+                text_widget.insert("1.0", details)
+                text_widget.config(state="disabled")
+
+                text_widget.grid(row=0, column=0, sticky="nsew")
+                vbar.grid(row=0, column=1, sticky="ns")
+                hbar.grid(row=1, column=0, sticky="ew")
+
+            if report_path:
+                tk.Button(
+                    dialog, text="Open crash report", width=18,
+                    command=lambda: self._open_with_default_app(report_path)
+                ).pack(pady=(0, 5))
+            elif details:
+                tk.Button(
+                    dialog, text="Copy", width=18,
+                    command=lambda: self._copy_to_clipboard(details)
+                ).pack(pady=(0, 5))
+
+            btn_frame = tk.Frame(dialog)
+            btn_frame.pack(pady=15)
+
+            def choose(choice):
+                result["choice"] = choice
+                dialog.destroy()
+                event.set()
+
+            tk.Button(btn_frame, text="Repair", width=12, command=lambda: choose("repair")).pack(side=tk.LEFT, padx=5)
+            tk.Button(btn_frame, text="Retry", width=12, command=lambda: choose("retry")).pack(side=tk.LEFT, padx=5)
+            tk.Button(btn_frame, text="Abandoned", width=12, command=lambda: choose("cancel")).pack(side=tk.LEFT, padx=5)
+
+            dialog.protocol("WM_DELETE_WINDOW", lambda: choose("cancel"))
+            dialog.update_idletasks()
+            x = self.root.winfo_x() + (self.root.winfo_width() - dialog.winfo_width()) // 2
+            y = self.root.winfo_y() + (self.root.winfo_height() - dialog.winfo_height()) // 2
+            dialog.geometry(f"+{x}+{y}")
+
+        self.root.after(0, build)
+        event.wait()
+        return result["choice"]
+
+    def _find_latest_crash_report(self, since_str):
+        crash_dir = GAME_DIR / "crash-reports"
+        if not crash_dir.exists():
+            return None
+        try:
+            since = time.mktime(time.strptime(since_str, "%Y-%m-%d %H:%M:%S"))
+            candidates = [
+                f for f in crash_dir.glob("*.txt")
+                if f.stat().st_mtime >= since
+            ]
+            if not candidates:
+                return None
+            latest = max(candidates, key=lambda f: f.stat().st_mtime)
+            return str(latest)
+        except Exception:
+            return None
+
+    def _retry_or_abort(self, version_id, ram, title="Launch error", summary="", details="", report_path=None):
+        choice = self._show_launch_error_dialog(title, summary, details, report_path=report_path)
+
+        if choice == "repair":
+            self.log(f"Preparing to repair Minecraft {version_id}...", "info")
+            return self._attempt_launch(version_id, ram, force=True)
+
+        if choice == "retry":
+            return self._attempt_launch(version_id, ram)
+
+        raise _AbortLaunch()
+
+    def _confirm_repair_selected_version(self):
+        version_id = self._get_selected_version_id()
+        if not version_id:
+            messagebox.showwarning("Repair version", "No version selected.")
+            return
+
         if self.download_thread and self.download_thread.is_alive():
-            self.cancel_download = True
-            self.log("Canceling download...", "warn")
-            self.update_progress("Canceling download...")
+            messagebox.showwarning("Repair version", "Another operation is already in progress.")
+            return
+
+        if not messagebox.askyesno(
+            "Repair version",
+            f"This will re-download all files for Minecraft {version_id}.\nDo you want to continue?"
+        ):
             return
 
         self.cancel_download = False
-        self.launch_btn.config(text="Cancel")
+        self._cancel_event.clear()
+        self.root.after(0, lambda: self.set_ui_state(False))
+        self.root.after(0, lambda: self.launch_btn.config(state="normal", text="Stop repair"))
+        self.download_thread = threading.Thread(target=self._repair_version_thread, args=(version_id,), daemon=True)
+        self.download_thread.start()
+
+    def _repair_version_thread(self, version_id):
+        try:
+            version_data, version_jar_path = self._get_version_ready(version_id, force=True)
+            self.log(f"Version {version_id} repaired successfully!", "success")
+            self.root.after(0, lambda: messagebox.showinfo("Repair version", f"Version {version_id} has been repaired."))
+        except _AbortLaunch:
+            self.log("Repair canceled.", "info")
+        except Exception as e:
+            self.log(f"Error repairing version {version_id}: {e}", "error")
+            self.root.after(0, lambda: messagebox.showerror("Repair version", "Unable to repair the version! See logs for details."))
+        finally:
+            self.root.after(0, lambda: self.launch_btn.config(text="Play"))
+            self.root.after(0, lambda: self.set_ui_state(True))
+
+    def launch_game(self):
+        if self.download_thread and self.download_thread.is_alive():
+            self._cancel_or_stop()
+            return
+
+        self.cancel_download = False
+        self._cancel_event.clear()
+        self._set_launch_button("Cancel", "normal")
+        self.log("Starting preparation...", "info")
         self.download_thread = threading.Thread(target=self._launch_game_thread, daemon=True)
         self.download_thread.start()
+
+    def _substitute(self, template, substitutions):
+        def repl(match):
+            key = match.group(1)
+            if key not in substitutions:
+                self.log(f"Unknown launch argument placeholder: ${{{key}}}", "warn")
+                return ""
+            return str(substitutions[key])
+        return re.sub(r"\$\{([^}]+)\}", repl, template)
+
+    def _process_argument_list(self, entries, substitutions):
+        result = []
+        for entry in entries:
+            if isinstance(entry, str):
+                result.append(self._substitute(entry, substitutions))
+            elif isinstance(entry, dict):
+                if not self._rules_allow(entry.get("rules")):
+                    continue
+                value = entry.get("value")
+                if isinstance(value, list):
+                    result.extend(self._substitute(v, substitutions) for v in value)
+                elif isinstance(value, str):
+                    result.append(self._substitute(value, substitutions))
+        return result
+
+    def _build_jvm_and_game_args(self, version_data, version_id, natives_dir, cp_str, active_user, uuid, token):
+        substitutions = {
+            "natives_directory": str(natives_dir),
+            "launcher_name": "MiniCube",
+            "launcher_version": "1.0",
+            "classpath": cp_str,
+            "classpath_separator": os.pathsep,
+            "library_directory": str(LIBRARIES_DIR),
+            "version_name": version_id,
+            "game_directory": str(GAME_DIR),
+            "assets_root": str(ASSETS_DIR),
+            "game_assets": str(ASSETS_DIR),
+            "assets_index_name": version_data.get("assetIndex", {}).get("id", ""),
+            "auth_player_name": active_user,
+            "auth_uuid": uuid,
+            "auth_access_token": token,
+            "auth_session": f"token:{token}:{uuid}",
+            "auth_xuid": uuid,
+            "clientid": "",
+            "user_properties": "{}",
+            "user_type": "legacy" if self.is_offline_var.get() else "msa",
+            "version_type": version_data.get("type", "release"),
+        }
+
+        arguments = version_data.get("arguments")
+        if arguments:
+            jvm_args = self._process_argument_list(arguments.get("jvm", []), substitutions)
+            game_args = self._process_argument_list(arguments.get("game", []), substitutions)
+            if not jvm_args:
+                jvm_args = [f"-Djava.library.path={natives_dir}", "-cp", cp_str]
+            return jvm_args, game_args
+
+        jvm_args = [f"-Djava.library.path={natives_dir}", "-cp", cp_str]
+        legacy_args_str = version_data.get("minecraftArguments")
+        if legacy_args_str:
+            game_args = [self._substitute(tok, substitutions) for tok in legacy_args_str.split()]
+        else:
+            game_args = [
+                "--username", active_user,
+                "--version", version_id,
+                "--gameDir", str(GAME_DIR),
+                "--assetsDir", str(ASSETS_DIR),
+                "--assetIndex", substitutions["assets_index_name"],
+                "--uuid", uuid,
+                "--accessToken", token,
+            ]
+        return jvm_args, game_args
 
     def _sanitize_args(self, args: list[str]) -> list[str]:
         sanitized = args.copy()
@@ -1289,50 +2045,101 @@ class App:
                     "Error",
                     "Please select an account or enable offline mode."
                 ))
-                self.root.after(0, lambda: self.launch_btn.config(text="Launch game"))
+                self.root.after(0, lambda: self.launch_btn.config(text="Play"))
                 return
 
-        username = self.username_var.get()
-        version_id = self.version_var.get()
+        version_id = self._get_selected_version_id()
         ram = self.ram_var.get()
+
+        if not version_id:
+            self.root.after(0, lambda: messagebox.showerror("Error", "Please select a valid version/profile."))
+            self.root.after(0, lambda: self.launch_btn.config(text="Play"))
+            return
 
         self.root.after(0, lambda: self.set_ui_state(False))
 
         try:
-            version_data, version_jar_path = self.prepare_version(version_id)
-            if version_data is None:
-                self.root.after(0, lambda: self.launch_btn.config(text="Launch game"))
-                self.root.after(0, lambda: self.set_ui_state(True))
-                return
+            self._attempt_launch(version_id, ram)
+        except _AbortLaunch:
+            pass
         except Exception as e:
-            self.log(f"Unable to prepare the version: {e}", "error")
-            self.root.after(0, lambda: messagebox.showerror("Error", f"Unable to prepare the version! See logs for details."))
-            self.root.after(0, lambda: self.launch_btn.config(text="Launch game"))
-            self.root.after(0, lambda: self.set_ui_state(True))
-            return
+            self.log(f"Unable to launch the game: {e}", "error")
+            self.root.after(0, lambda: messagebox.showerror("Error", "Unable to launch the game! See logs for details."))
+
+        self.root.after(0, lambda: self.launch_btn.config(text="Play"))
+        self.root.after(0, lambda: self.set_ui_state(True))
+        self.log("=== Game finished ===", "info")
+        self.rpc.update(details="In the launcher")
+
+        if self._hidden_in_background:
+            self.root.after(0, self._restore_window)
+
+    def _attempt_launch(self, version_id, ram, force=False):
+        is_installed_profile = self._is_installed_profile()
+        is_direct_launch = not force and self.profile_manager.has_profile(version_id)
+
+        button_label = "Stop repair" if force else "Cancel"
+        self._set_launch_button(button_label, "normal")
+
+        try:
+            version_data, version_jar_path = self._get_version_ready(version_id, force=force)
+        except _AbortLaunch:
+            raise
+        except Exception as e:
+            self.log(f"Unable to prepare the version {version_id}: {e}", "error")
+            return self._retry_or_abort(
+                version_id, ram,
+                title="Missing files",
+                summary=f"Some files required to launch Minecraft {version_id} are missing or corrupted.",
+                details=self._build_debug_report(e, app_info={"Minecraft version": version_id})
+            )
 
         classpath = []
-        for lib in version_data.get("libraries", []):
-            if "downloads" in lib and "artifact" in lib["downloads"]:
-                path = lib["downloads"]["artifact"]["path"]
-                jar_path = LIBRARIES_DIR / path
-                if jar_path.exists():
-                    classpath.append(str(jar_path))
+        seen_lib_paths = set()
+        for path, _ in self._iter_library_artifacts(version_data):
+            if path in seen_lib_paths:
+                continue
+            seen_lib_paths.add(path)
+            jar_path = LIBRARIES_DIR / path
+            if is_direct_launch:
+                classpath.append(str(jar_path))
+            elif self._is_valid_jar(jar_path):
+                classpath.append(str(jar_path))
 
         version_jar = VERSIONS_DIR / version_id / f"{version_id}.jar"
         classpath.append(str(version_jar))
 
         cp_str = os.pathsep.join(classpath)
-        java_major = self.get_required_java_version(version_data)
-        java_path = self.ensure_java_installed(java_major)
         main_class = version_data.get("mainClass", "net.minecraft.client.main.Main")
-        natives_dir = self.extract_natives(version_data)
+        java_major = self.get_required_java_version(version_data)
+
+        cached_profile = self.profile_manager.get_profile(version_id) if is_direct_launch else None
+        cached_java_path = cached_profile.get("javaPath") if cached_profile else None
+        cached_java_major = cached_profile.get("javaMajor") if cached_profile else None
+
+        self._set_launch_button("Loading...", "disabled")
+        self.update_progress("Loading Java...")
+        if (
+            is_direct_launch and cached_java_path and cached_java_major == java_major
+            and Path(cached_java_path).exists()
+        ):
+            java_path = Path(cached_java_path)
+            natives_dir = NATIVES_DIR / version_id
+        else:
+            self.log(f"Preparing Java {java_major} runtime.", "info")
+            java_path = self.ensure_java_installed(java_major)
+            natives_dir = self.extract_natives(version_data)
+            self.profile_manager.create_or_update(
+                version_id, profile_type="custom" if is_installed_profile else "vanilla",
+                javaPath=str(java_path), javaMajor=java_major
+            )
 
         if self.is_offline_var.get():
             active_user = self.username_var.get()
             uuid = "0"
             token = "0"
         else:
+            self.update_progress("Signing in...")
             account_name = self.selected_account_var.get()
             account_data = self.account_manager.get_account_by_name(account_name)
 
@@ -1347,9 +2154,7 @@ class App:
                     "Authentication Error",
                     f"Failed to refresh token for {account_data.get('username')}.\nPlease log in again."
                 ))
-                self.root.after(0, lambda: self.launch_btn.config(text="Launch game"))
-                self.root.after(0, lambda: self.set_ui_state(True))
-                return
+                raise _AbortLaunch()
 
             active_user = account_data['username']
             uuid = account_data['uuid']
@@ -1357,51 +2162,97 @@ class App:
 
             self._update_account_prefs(last_used_account=uuid)
 
-        args = [
-            str(java_path),
-            f"-Djava.library.path={natives_dir}",
-            f"-Xms{ram}M",
-            f"-Xmx{ram}M",
-            "-cp", cp_str,
-            main_class,
-            "--username", active_user,
-            "--version", version_id,
-            "--gameDir", str(GAME_DIR),
-            "--assetsDir", str(ASSETS_DIR),
-            "--assetIndex", version_data["assetIndex"]["id"],
-            "--uuid", uuid,
-            "--accessToken", token
-        ]
+        jvm_args, game_args = self._build_jvm_and_game_args(
+            version_data, version_id, natives_dir, cp_str, active_user, uuid, token
+        )
+
+        args = [str(java_path), f"-Xms{ram}M", f"-Xmx{ram}M"] + jvm_args + [main_class] + game_args
 
         safe_args = self._sanitize_args(args)
         self.log(f"[Command] {' '.join(safe_args)}", "info")
 
         try:
-            self.update_progress("Game running...")
+            self.update_progress("Loading...")
             self.rpc.update(
                 details=f"Playing Minecraft {version_id}",
-                small_image=f"https://windowscraft76.fr/assets/minicube/steve_32x32.png" if self.is_offline_var.get() else f"https://mc-heads.net/avatar/{uuid}/32",
+                small_image="https://windowscraft76.fr/assets/minicube/steve_32x32.png" if self.is_offline_var.get() else f"https://mc-heads.net/avatar/{uuid}/32",
                 small_text=f"Playing offline as {active_user}" if self.is_offline_var.get() else f"Playing as {active_user}"
             )
-            game_process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            launch_time = time.strftime("%Y-%m-%d %H:%M:%S")
+            game_process = subprocess.Popen(
+                args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding="utf-8", errors="replace"
+            )
+            self._game_stop_requested = False
             self.game_process = game_process
-            self.root.after(0, lambda: self.launch_btn.config(state="disabled", text="Ready!"))
+            self._game_started_at = time.monotonic()
+            self.log(f"Game started (PID {game_process.pid}) as {active_user}.", "success")
+            self._set_launch_button("Stop", "normal")
+            self._update_game_status()
         except Exception as e:
             self.log(f"Unable to start Java process: {e}", "error")
-            self.root.after(0, lambda: self.launch_btn.config(text="Launch game"))
-            self.root.after(0, lambda: self.set_ui_state(True))
-            return
+            return self._retry_or_abort(
+                version_id, ram,
+                title="Launch error",
+                summary="Unable to start the Java process.",
+                details=self._build_debug_report(
+                    e, app_info={"Java version": f"{java_major} ({java_path})", "Command": " ".join(safe_args)}
+                )
+            )
+
+        known_crash_reason = None
+        crash_pattern = "Failed to parse vanilla pack metadata"
+        log_tail = deque(maxlen=25)
 
         for line in iter(game_process.stdout.readline, ''):
-            self.log(line.strip("\n"), "game")
+            clean_line = line.strip("\n")
+            self.log(clean_line, "game")
+            log_tail.append(clean_line)
+            if crash_pattern in clean_line:
+                known_crash_reason = "Failed to parse vanilla pack metadata (corrupted files)."
+                self.log("Corrupted pack metadata detected, stopping the game...", "error")
+                game_process.terminate()
+                break
+
         game_process.wait()
+        exit_code = game_process.returncode
+        played_for = time.monotonic() - self._game_started_at if self._game_started_at is not None else 0
+        self._stop_game_status_timer()
+        self._game_started_at = None
         self.game_process = None
+        self.update_progress(f"Closed game - You played for {self.format_duration(played_for)}")
+        self.log(f"Java process ended with exit code {exit_code}.", "info")
 
-        self.root.after(0, lambda: self.launch_btn.config(text="Launch game"))
-        self.root.after(0, lambda: self.set_ui_state(True))
-        self.update_progress("Game closed")
-        self.log("=== Game finished ===", "info")
-        self.rpc.update(details="In the launcher")
+        crashed = not self._game_stop_requested and (known_crash_reason is not None or exit_code not in (0, None))
+        if crashed:
+            reason = known_crash_reason or "The game closed unexpectedly."
+            crash_report_path = self._find_latest_crash_report(launch_time)
 
-        if self._hidden_in_background:
-            self.root.after(0, self._restore_window)
+            debug_text = None
+            if crash_report_path:
+                try:
+                    with open(crash_report_path, "r", encoding="utf-8", errors="replace") as f:
+                        debug_text = f.read()
+                except Exception:
+                    crash_report_path = None
+
+            if debug_text is None:
+                error_text = reason
+                if log_tail:
+                    error_text += "\n\nLast log lines:\n" + "\n".join(log_tail)
+                debug_text = self._build_debug_report(
+                    error_text,
+                    app_info={
+                        "Java version": f"{java_major} ({java_path})",
+                        "Exit code": exit_code,
+                        "Launch command": " ".join(safe_args),
+                    }
+                )
+
+            return self._retry_or_abort(
+                version_id, ram,
+                title="Game crashed",
+                summary=reason,
+                details=debug_text,
+                report_path=crash_report_path
+            )

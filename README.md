@@ -1,7 +1,7 @@
 <div align="center">
     <picture>
-        <source srcset="./Assets/github/banner_white_transparent_330x90.png" media="(prefers-color-scheme: dark)">
-        <source srcset="./Assets/github/banner_black_transparent_330x90.png" media="(prefers-color-scheme: light)">
+        <source srcset="https://windowscraft76.fr/assets/minicube/banner_white_transparent_330x90.png" media="(prefers-color-scheme: dark)">
+        <source srcset="https://windowscraft76.fr/assets/minicube/banner_black_transparent_330x90.png" media="(prefers-color-scheme: light)">
         <img src="" alt="Banner" width="330" height="90">
     </picture>
     <p>
@@ -37,6 +37,8 @@ It allows you to launch **any Minecraft version** while keeping the launcher min
 * Discord Rich Presence
 * Internal Java installation
 * Protection of personal data
+* Crash report screen
+* Profile
 * Simple interface
 * Lightweight
 * Open-source

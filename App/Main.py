@@ -8,9 +8,7 @@ from tkinter import messagebox
 from App import App
 from SplashScreen import SplashScreen
 from DiscordRPC import DiscordRPC
-from Config import LOGS_DIR
-
-SINGLE_INSTANCE_PORT = 51837
+from Config import LOGS_DIR, SINGLE_INSTANCE_PORT
 
 class Tee:
     def __init__(self, *files):
@@ -81,6 +79,7 @@ def main():
     def start_launcher():
         try:
             app = App(root, rpc=rpc, debug=debug, instance_socket=instance_socket)
+            root.app = app
 
             root.update()
             root.after(100, splash.root.destroy)

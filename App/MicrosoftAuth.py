@@ -91,9 +91,10 @@ class MicrosoftAuth:
 
         except Exception as e:
             self.auth_failed = True
+            error_str = str(e)
             if self.app:
-                self.app.log(f"Authentication failed!: {e}", "error")
-                self.app.root.after(0, lambda: messagebox.showerror("Authentication Failed! See logs for details.", str(e)))
+                self.app.log(f"Authentication failed!: {error_str}", "error")
+                self.app.root.after(0, lambda: messagebox.showerror("Authentication Failed! See logs for details.", error_str))
             return None
 
     def _start_local_server(self):
@@ -111,7 +112,7 @@ class MicrosoftAuth:
                 query = urllib.parse.parse_qs(parsed.query)
 
                 self.send_response(200)
-                self.send_header("ASSETS-type", "text/html; charset=utf-8")
+                self.send_header("Content-type", "text/html; charset=utf-8")
                 self.end_headers()
 
                 if "error" in query:
