@@ -1,6 +1,12 @@
 # Ignore Minecraft files/folders
 level.dat
 logs/
+config/
+.mixin.out
+crash-reports/
+quiltloader.log
+fabricloader.log
+.cache
 
 # Ignore the Python execution directory
 python*/

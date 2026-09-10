@@ -148,30 +148,6 @@ def _last_entry(catalog: dict, beta_fallback: bool = True):
     return None
 
 
-def get_remote_version(beta_fallback: bool = True) -> str:
-    try:
-        catalog = _fetch_remote_catalog()
-        entry = _last_entry(catalog, beta_fallback)
-        if not entry:
-            return "No version found"
-        return entry[0]
-
-    except Exception as e:
-        return f"Error fetching remote version: {e}"
-
-
-def get_remote_display_version(beta_fallback: bool = True) -> str:
-    try:
-        catalog = _fetch_remote_catalog()
-        entry = _last_entry(catalog, beta_fallback)
-        if not entry:
-            return "No version found"
-        return entry[2]
-
-    except Exception as e:
-        return f"Error fetching remote version: {e}"
-
-
 def _parse_version(version_str: str):
     if not version_str:
         return None

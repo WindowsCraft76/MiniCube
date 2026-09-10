@@ -42,7 +42,7 @@ class DiscordRPC:
                 self.app.log("Successfully connected to Discord RPC", "success")
         except Exception as e:
             if self.app:
-                self.app.log(f"Failed to connect to Discord RPC!", "error")
+                self.app.log(f"Failed to connect to Discord RPC! {e}", "error")
             self.rpc = None
 
     def update(self, details: str, small_image: str = None, small_text: str = None):

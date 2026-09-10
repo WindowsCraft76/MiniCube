@@ -26,10 +26,9 @@ def fetch_and_cache_head(uuid: str, skin_url: str, app=None) -> Path | None:
         r = requests.get(skin_url, timeout=10)
         r.raise_for_status()
 
-        skin_image = Image.open(BytesIO(r.ASSETS))
+        skin_image = Image.open(BytesIO(r.content))
         head = _build_head_image(skin_image)
 
-        CACHE_DIR.mkdir(parents=True, exist_ok=True)
         head_path = CACHE_DIR / f"{uuid}.png"
         head.save(head_path, format="PNG")
 
