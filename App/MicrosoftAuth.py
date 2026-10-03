@@ -1,16 +1,24 @@
-import webbrowser
 import http.server
 import socketserver
 import threading
-import urllib.parse
 import time
+import urllib.parse
+import webbrowser
+from tkinter import messagebox
 import requests
 import SkinManager
-from tkinter import messagebox
 from Config import (
-    CLIENT_ID, REDIRECT_URI, SCOPE, AUTH_URL,
-    TOKEN_URL, API_MCSERVICES_URL, XBOX_USER_AUTH_URL, XBOX_XSTS_URL
-    )
+    API_MCSERVICES_URL,
+    AUTH_URL,
+    CLIENT_ID,
+    COOLDOWN_TOKEN_REFRESH,
+    REDIRECT_URI,
+    SCOPE,
+    TOKEN_URL,
+    XBOX_USER_AUTH_URL,
+    XBOX_XSTS_URL,
+)
+
 
 class MicrosoftAuth:
     HTML_SUCCESS = """
@@ -225,12 +233,16 @@ class MicrosoftAuth:
             return skins[0]["url"]
         return None
 
-    def refresh_token(self, account_data: dict):
+    def refresh_token(self, account_data: dict, force=False):
         refresh_tok = account_data.get("refresh_token")
         if not refresh_tok:
             if self.app:
                 self.app.log("No refresh token found for this account. Please log in again.", "error")
             return None
+
+        expires_at = account_data.get("access_token_expires_at", 0)
+        if not force and account_data.get("access_token") and expires_at > time.time():
+            return account_data
 
         try:
             if self.app:
@@ -263,6 +275,7 @@ class MicrosoftAuth:
 
             account_data["access_token"] = mc_token
             account_data["refresh_token"] = new_ms_refresh
+            account_data["access_token_expires_at"] = time.time() + COOLDOWN_TOKEN_REFRESH
 
             try:
                 profile = self._get_minecraft_profile(mc_token)

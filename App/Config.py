@@ -78,3 +78,17 @@ USER_AGENT = (
 )
 
 SINGLE_INSTANCE_PORT = 51837
+COOLDOWN_TOKEN_REFRESH = 3600
+
+TERMINAL_COLORS = {
+    "info": "\033[37m",
+    "success": "\033[32m",
+    "warn": "\033[33m",
+    "error": "\033[31m",
+    "game": "\033[36m",
+    "debug": "\033[35m",
+}
+TERMINAL_RESET = "\033[0m"
+
+KEYRING_SERVICE  = "MiniCube_v1_"
+KEYRING_USERNAME = "account_secret"

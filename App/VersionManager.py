@@ -1,6 +1,5 @@
 import re
 import requests
-
 from Config import API_URL, DOWNLOADLAST_URL, REGISTRY_KEY_PATH, REGISTRY_VALUE_NAME
 
 try:

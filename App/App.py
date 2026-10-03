@@ -1,39 +1,63 @@
-﻿import os
-import re
-import json
+﻿import contextlib
 import hashlib
-import requests
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import tkinter as tk
+import json
+import os
+import platform
+import re
 import subprocess
+import sys
 import threading
 import time
+import tkinter as tk
 import webbrowser
 import zipfile
-import platform
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from tkinter import ttk, messagebox
-from MicrosoftAuth import MicrosoftAuth
+from tkinter import messagebox, ttk
+import requests
 from AccountManager import AccountManager
-from ProfileManager import ProfileManager
 from Config import (
-    ASSETS, INDEXES_DIR, GAME_DIR, ASSETS_DIR, SETTINGS_FILE,
-    VERSIONS_DIR, LIBRARIES_DIR, OBJECTS_DIR, JAVA_DIR, PAGE_URL,
-    VERSION_MANIFEST_URL, RESSOURCE_MC_URL, API_AZUL_URL, NATIVES_DIR,
-    TERMS_URL, PRIVACY_URL, DISCLAIMER_URL, ISSUES_URL, DOWNLOADLAST_URL, HELP_INSTALLED_VERSION_URL,
-    copyright, CACHE_DIR, UPDATE_POPUP_MESSAGES, UPDATE_POPUP_MESSAGE_DEFAULT, USER_AGENT,
-    LIBRARIES_MC_URL
-    )
-from VersionManager import (
-    check_for_update,
-    get_update_page_url,
-    get_local_version_type,
-    read_local_version,
-    format_local_version_for_display,
+    API_AZUL_URL,
+    ASSETS,
+    ASSETS_DIR,
+    CACHE_DIR,
+    DISCLAIMER_URL,
+    DOWNLOADLAST_URL,
+    GAME_DIR,
+    HELP_INSTALLED_VERSION_URL,
+    INDEXES_DIR,
+    ISSUES_URL,
+    JAVA_DIR,
+    LIBRARIES_DIR,
+    LIBRARIES_MC_URL,
+    NATIVES_DIR,
+    OBJECTS_DIR,
+    PAGE_URL,
+    PRIVACY_URL,
+    RESSOURCE_MC_URL,
+    SETTINGS_FILE,
+    TERMS_URL,
+    UPDATE_POPUP_MESSAGE_DEFAULT,
+    UPDATE_POPUP_MESSAGES,
+    USER_AGENT,
+    VERSION_MANIFEST_URL,
+    VERSIONS_DIR,
+    copyright,
+    TERMINAL_COLORS,
+    TERMINAL_RESET,
 )
 from DiscordRPC import DiscordRPC
+from MicrosoftAuth import MicrosoftAuth
+from ProfileManager import ProfileManager
 from SplashScreen import center_window
+from VersionManager import (
+    check_for_update,
+    format_local_version_for_display,
+    get_local_version_type,
+    get_update_page_url,
+    read_local_version,
+)
 
 _print_lock = threading.Lock()
 
@@ -92,6 +116,7 @@ class App:
         self.root.protocol("WM_DELETE_WINDOW", self._on_close_request)
 
         profile_menu = tk.Menu(self.toolbar, tearoff=0)
+        self.profile_menu = profile_menu
         profile_menu.add_radiobutton(label="Vanilla", variable=self.profile_var, value="vanilla", command=self._on_profile_changed)
         profile_menu.add_radiobutton(label="Installed", variable=self.profile_var, value="installed", command=self._on_profile_changed)
         self.toolbar.add_cascade(label="Profile", menu=profile_menu)
@@ -135,7 +160,6 @@ class App:
         self.keep_open_var = tk.BooleanVar(value=True)
 
         self.download_thread = None
-        self.cancel_download = False
         self._cancel_event = threading.Event()
         self._ui_locked = False
 
@@ -150,7 +174,6 @@ class App:
         self.profile_manager.ensure_file()
         self.selected_account_var = tk.StringVar()
         self.is_offline_var = tk.BooleanVar(value=False)
-        self.accounts_list = []
         self.default_account = None
         self.last_used_account = None
 
@@ -215,10 +238,8 @@ class App:
             except Exception:
                 pass
             finally:
-                try:
+                with contextlib.suppress(Exception):
                     conn.close()
-                except Exception:
-                    pass
 
     def _restore_window(self):
         try:
@@ -254,7 +275,6 @@ class App:
             self.stop_game()
             return
         if self.download_thread and self.download_thread.is_alive():
-            self.cancel_download = True
             self._cancel_event.set()
             self.log("Cancellation requested!", "warn")
             self.update_progress("Canceling...")
@@ -272,10 +292,8 @@ class App:
             self.log(f"Unable to stop Java process: {error}", "error")
 
     def _shutdown_app(self):
-        try:
+        with contextlib.suppress(Exception):
             self.save_settings()
-        except Exception:
-            pass
         try:
             if self.rpc:
                 self.rpc.stop_rpc()
@@ -288,10 +306,8 @@ class App:
             pass
         if self.debug:
             print("Closing!")
-        try:
+        with contextlib.suppress(Exception):
             self.root.destroy()
-        except Exception:
-            pass
 
     def toggle_settings_window(self):
         if getattr(self, "settings_window", None) and self.settings_window.winfo_exists():
@@ -358,22 +374,16 @@ class App:
             self.repair_btn.config(state="disabled")
 
         def _on_close():
-            try:
+            with contextlib.suppress(Exception):
                 self.settings_window.destroy()
-            except Exception:
-                pass
             self.settings_window = None
             if getattr(self, "old_check", None):
-                try:
+                with contextlib.suppress(Exception):
                     self.old_check.destroy()
-                except Exception:
-                    pass
                 self.old_check = None
             if getattr(self, "repair_btn", None):
-                try:
+                with contextlib.suppress(Exception):
                     self.repair_btn.destroy()
-                except Exception:
-                    pass
                 self.repair_btn = None
         
         self.settings_window.protocol("WM_DELETE_WINDOW", _on_close)
@@ -390,7 +400,11 @@ class App:
         timestamped = f"[{time.strftime('%H:%M:%S')}] {msg}"
         if self.debug:
             with _print_lock:
-                print(f"[{kind.upper()}] {timestamped}")
+                terminal_message = f"[{kind.upper()}] {timestamped}"
+                if sys.stdout.isatty():
+                    color = TERMINAL_COLORS.get(kind, TERMINAL_COLORS["info"])
+                    terminal_message = f"{color}{terminal_message}{TERMINAL_RESET}"
+                print(terminal_message)
         self.log_buffer.append((timestamped, kind))
         self.root.after(0, lambda: self._append_log_to_window(timestamped, kind))
 
@@ -425,10 +439,8 @@ class App:
 
     def _on_close_log_window(self):
         if self.log_window:
-            try:
+            with contextlib.suppress(Exception):
                 self.log_window.destroy()
-            except Exception:
-                pass
         self.log_window = None
         self.log_text_win = None
 
@@ -484,10 +496,8 @@ class App:
         self.acc_win.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _on_close(self):
-        try:
+        with contextlib.suppress(Exception):
             self.acc_win.destroy()
-        except Exception:
-            pass
         self.acc_win = None
 
     def add_microsoft_account(self):
@@ -507,10 +517,8 @@ class App:
         self.connecting_win = tk.Toplevel(self.acc_win)
         self.connecting_win.title("Connecting...")
         self.connecting_win.resizable(False, False)
-        try:
+        with contextlib.suppress(Exception):
             self.connecting_win.iconbitmap(str(ASSETS / "icon" / "icon_64x64.ico"))
-        except Exception:
-            pass
         center_window(self.connecting_win, 280, 90)
         self.connecting_win.transient(self.acc_win)
         self.connecting_win.protocol("WM_DELETE_WINDOW", lambda: None)
@@ -595,7 +603,13 @@ class App:
                 pass
 
     def refresh_account_listbox(self):
-        if not hasattr(self, "acc_rows_frame"):
+        if not getattr(self, "acc_rows_frame", None):
+            return
+
+        try:
+            if not self.acc_rows_frame.winfo_exists():
+                return
+        except tk.TclError:
             return
 
         for widget in self.acc_rows_frame.winfo_children():
@@ -694,13 +708,13 @@ class App:
 
         def worker():
             auth = MicrosoftAuth(app=self)
-            refreshed = auth.refresh_token(account_data)
+            refreshed = auth.refresh_token(account_data, force=True)
 
             def finish():
                 if refreshed:
-                    self.account_manager.remove_account(refreshed['username'])
-                    self.account_manager.add_account(refreshed)
-                    self.refresh_account_listbox()
+                    self.account_manager.update_account(refreshed)
+                    if getattr(self, "acc_win", None) and self.acc_win.winfo_exists():
+                        self.refresh_account_listbox()
                     self.refresh_accounts_ui()
                 else:
                     messagebox.showerror(
@@ -742,7 +756,7 @@ class App:
             return
 
         try:
-            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+            with open(SETTINGS_FILE, encoding="utf-8") as f:
                 data = json.load(f)
 
             self.username_var.set(data.get("username", "Steve"))
@@ -762,7 +776,7 @@ class App:
         if not SETTINGS_FILE.exists():
             return {}
         try:
-            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+            with open(SETTINGS_FILE, encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             return {}
@@ -820,7 +834,7 @@ class App:
             return
 
         try:
-            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+            with open(SETTINGS_FILE, encoding="utf-8") as f:
                 data = json.load(f)
 
             self.username_var.set(data.get("username", "Steve"))
@@ -866,15 +880,12 @@ class App:
         self.keep_open_var.set(self._temp_keep_open_var.get())
 
     def _apply_discord_rpc(self):
+        running = self.rpc.is_running()
         if self.discord_rpc_var.get():
-            if not self.rpc.is_running():
+            if not running:
                 self.rpc.start_rpc()
-        else:
-            if self.rpc.is_running():
-                self.rpc.stop_rpc()
-
-    def _toggle_discord_rpc(self):
-        self._apply_discord_rpc()
+        elif running:
+            self.rpc.stop_rpc()
 
     def toggle_account_mode(self):
         has_official = len(self.account_manager.get_all_accounts()) > 0
@@ -894,11 +905,11 @@ class App:
             
             self.offline_label.pack(pady=(0, 2))
             self.offline_entry.pack(pady=(0, 0))
-            self.log("Mode change: Offline", "info")
+            self.log("Switching to offline mode.", "info")
         else:
             self.account_label.pack(pady=(0, 2))
             self.account_menu.pack(pady=(0, 0))
-            self.log("Mode change: Online", "info")
+            self.log("Switching to online mode.", "info")
 
     def check_version_mismatch(self):
 
@@ -933,10 +944,8 @@ class App:
             self.root.after(0, self._hide_update_button)
 
     def _hide_update_button(self):
-        try:
+        with contextlib.suppress(Exception):
             self.update_btn.pack_forget()
-        except Exception:
-            pass
 
 
     def start_launch_sequence(self):
@@ -947,10 +956,8 @@ class App:
             try:
                 self.check_version_mismatch()
             except Exception as e:
-                try:
+                with contextlib.suppress(Exception):
                     self.log(f"Error checking for updates! ({e})", "error")
-                except Exception:
-                    pass
 
         def run_manifest_fetch():
             try:
@@ -959,10 +966,8 @@ class App:
                 else:
                     self.root.after(0, lambda: self._set_version_list([], error=True))
             except Exception as e:
-                try:
+                with contextlib.suppress(Exception):
                     self.log(f"Error loading versions! ({e})", "error")
-                except Exception:
-                    pass
                 self.root.after(0, lambda: self._set_version_list([], error=True))
 
         self.log("Starting up...", "info")
@@ -1051,10 +1056,8 @@ class App:
     def _remove_update_toolbar_entry(self):
         idx = self._find_toolbar_index_by_label(self.UPDATE_LABEL)
         if idx is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self.toolbar.delete(idx)
-            except Exception:
-                pass
 
     _VERSION_PLACEHOLDERS = ("Loading...", "No version found", "Error")
 
@@ -1092,28 +1095,29 @@ class App:
                 digest.update(chunk)
         return digest.hexdigest() == expected_hash
 
-    def _is_valid_asset(self, path, expected_hash):
-        return self._has_sha1(path, expected_hash)
-
-    def _load_json_file(self, path, url=None, expected_hash=None, force=False):
+    def _load_json_file(self, path, url=None, expected_hash=None, force=False, announce_download=True):
         valid = path.is_file() and not force
         if valid and expected_hash:
             valid = self._has_sha1(path, expected_hash)
         if valid:
             try:
-                with open(path, "r", encoding="utf-8") as data_file:
-                    return json.load(data_file)
+                with open(path, encoding="utf-8") as data_file:
+                    data = json.load(data_file)
+                self.log(f"{path.name} already present.", "info")
+                return data
             except (OSError, json.JSONDecodeError):
                 valid = False
 
         if not url:
             raise ValueError(f"Invalid JSON file: {path}")
         self._download_file(url, path)
-        with open(path, "r", encoding="utf-8") as data_file:
+        with open(path, encoding="utf-8") as data_file:
             data = json.load(data_file)
         if expected_hash and not self._has_sha1(path, expected_hash):
             path.unlink(missing_ok=True)
             raise ValueError(f"SHA-1 mismatch for JSON file: {path}")
+        if announce_download:
+            self.log(f"Downloaded {path.name}", "success")
         return data
 
     def _set_version_list(self, values, error=False):
@@ -1162,7 +1166,7 @@ class App:
 
         try:
             self._urlretrieve(VERSION_MANIFEST_URL, VERSIONS_DIR / "version_manifest.json")
-            with open(VERSIONS_DIR / "version_manifest.json", "r", encoding="utf-8") as f:
+            with open(VERSIONS_DIR / "version_manifest.json", encoding="utf-8") as f:
                 self.version_manifest = json.load(f)
             self.log(f"Version manifest fetched successfully! ({len(self.version_manifest.get('versions', []))} versions available)", "success")
             return True
@@ -1175,11 +1179,11 @@ class App:
         items = []
         for v in self.version_manifest.get("versions", []):
             vtype = v.get("type", "")
-            if vtype == "release":
-                items.append(v)
-            elif vtype == "snapshot" and self.show_snapshots_var.get():
-                items.append(v)
-            elif vtype in ["old_alpha", "old_beta"] and self.show_old_var.get():
+            if (
+                vtype == "release"
+                or (vtype == "snapshot" and self.show_snapshots_var.get())
+                or (vtype in ("old_alpha", "old_beta") and self.show_old_var.get())
+            ):
                 items.append(v)
 
         items.sort(key=lambda v: v["releaseTime"], reverse=True)
@@ -1204,6 +1208,15 @@ class App:
         normal_state = "normal" if enabled else "disabled"
         combo_state = "readonly" if enabled else "disabled"
 
+        profile_menu_index = self._find_toolbar_index_by_label("Profile")
+        if profile_menu_index is not None:
+            self.toolbar.entryconfig(profile_menu_index, state=normal_state)
+        if hasattr(self, "profile_menu"):
+            for profile_index in range(self.profile_menu.index("end") + 1):
+                self.profile_menu.entryconfig(profile_index, state=normal_state)
+
+        self.root.config(menu=self.toolbar)
+
         self.account_menu.config(state=combo_state)
         self._sync_version_menu_state()
 
@@ -1225,10 +1238,6 @@ class App:
         if hasattr(self, "repair_btn") and self.repair_btn and self.repair_btn.winfo_exists():
             self.repair_btn.config(state=normal_state)
 
-        profile_menu_index = self._find_toolbar_index_by_label("Profile")
-        if profile_menu_index is not None:
-            self.toolbar.entryconfig(profile_menu_index, state=normal_state)
-
     def update_progress(self, text=""):
         if text:
             self.root.after(0, lambda: self.progress_label.config(text=text))
@@ -1242,10 +1251,8 @@ class App:
 
     def _stop_game_status_timer(self):
         if self._game_status_after_id is not None:
-            try:
+            with contextlib.suppress(tk.TclError):
                 self.root.after_cancel(self._game_status_after_id)
-            except tk.TclError:
-                pass
             self._game_status_after_id = None
 
     def _set_launch_button(self, text, state="normal"):
@@ -1266,7 +1273,8 @@ class App:
 
     def prepare_version(self, version_id, force=False):
         self.log(f"Preparing to repair Minecraft {version_id}..." if force else f"Preparing Minecraft {version_id}...", "info")
-        self.update_progress(f"Repairing..." if force else f"Preparing...")
+        self.update_progress("Repairing..." if force else "Preparing...")
+        self.log(f"Downloading Minecraft {self.version_var.get()} files...", "info")
 
         version_info = next(v for v in self.version_manifest["versions"] if v["id"] == version_id)
         version_dir = VERSIONS_DIR / version_id
@@ -1285,6 +1293,8 @@ class App:
 
         if force or not self._is_valid_jar(version_jar_path):
             self._download_version_jar(version_id, version_data, version_jar_path)
+        else:
+            self.log(f"{version_id}.jar already present.", "info")
 
         asset_index_id = version_data["assetIndex"]["id"]
         asset_index_url = version_data["assetIndex"]["url"]
@@ -1302,49 +1312,28 @@ class App:
 
         return version_data, version_jar_path
 
-    def _download_version_files(self, version_data, objects, force=False):
-        tasks = []
-        for path, url in self._iter_library_artifacts(version_data):
-            if not url:
-                continue
-            lib_path = LIBRARIES_DIR / path
-            if force or not self._is_valid_jar(lib_path):
-                tasks.append(("lib", lib_path, url))
-        for name, obj in objects.items():
-            hash_val = obj["hash"]
-            subdir = hash_val[:2]
-            url = f"{RESSOURCE_MC_URL}/{subdir}/{hash_val}"
-            obj_path = OBJECTS_DIR / subdir / hash_val
-            if force or not self._is_valid_asset(obj_path, hash_val):
-                tasks.append(("asset", obj_path, url))
-
-        if not tasks:
-            self.log("Libraries and assets already up to date, nothing to download.", "info")
+    def _download_batch(self, label, items):
+        if not items:
+            self.log(f"No {label} to download. (already present)", "info")
             return True
 
-        total = len(tasks)
-        lib_count = sum(1 for kind, _, _ in tasks if kind == "lib")
-        asset_count = total - lib_count
-        self.log(
-            f"Downloading {total} missing file{'s' if total != 1 else ''} "
-            f"({lib_count} librar{'y' if lib_count == 1 else 'ies'}, {asset_count} asset{'s' if asset_count != 1 else ''})...",
-            "info"
-        )
-        self.update_progress("Downloading files...")
+        total = len(items)
+        self.log(f"Downloading {total} {label}{'s' if total != 1 and not label.endswith('s') else ''}...", "info")
+        self.update_progress(f"Downloading {label}s...")
 
         done = 0
         errors = []
         progress_lock = threading.Lock()
         start_time = time.time()
 
-        def download_one(task):
-            kind, path, url = task
+        def download_one(item):
+            path, url = item
             if self._cancel_event.is_set():
                 return
             path.parent.mkdir(parents=True, exist_ok=True)
             try:
                 self._download_file(url, path)
-                self.log(f"Downloaded {kind}: {path.name}", "success")
+                self.log(f"Downloaded {label}: {path.name}", "success")
             except Exception as e:
                 self.log(f"Error downloading {url}: {e}", "error")
                 with progress_lock:
@@ -1358,27 +1347,55 @@ class App:
                 speed = done / elapsed if elapsed > 0 else 0
                 remaining = (total - done) / speed if speed > 0 else 0
                 remaining_str = self.format_duration(remaining)
-                self.update_progress(f"Downloading files: {done}/{total} ({remaining_str} left)")
+                self.update_progress(f"Downloading {label}s: {done}/{total} ({remaining_str} left)")
 
         with ThreadPoolExecutor(max_workers=8) as executor:
-            futures = [executor.submit(download_one, task) for task in tasks]
+            futures = [executor.submit(download_one, item) for item in items]
             for _ in as_completed(futures):
                 pass
 
         if self._cancel_event.is_set():
-            self.log("File download canceled by user.", "info")
+            self.log("Download canceled by user.", "info")
             self.update_progress("Download canceled")
             return False
 
         if errors:
-            self.log(f"{len(errors)} file(s) failed to download, see above for details.", "error")
-            self.update_progress(f"{len(errors)} file(s) failed to download!")
+            self.log(f"{len(errors)} {label}(s) failed to download, see above for details.", "error")
+            self.update_progress(f"{len(errors)} {label}(s) failed to download!")
             return False
 
         elapsed_str = self.format_duration(time.time() - start_time)
-        self.log(f"All {total} files downloaded successfully in {elapsed_str}.", "success")
-        self.update_progress("Download complete!")
+        self.log(f"Downloaded {total} {label}{'s' if total != 1 else ''} in {elapsed_str}.", "success")
         return True
+
+    def _download_version_files(self, version_data, objects, force=False):
+        missing_libs = []
+        for path, url in self._iter_library_artifacts(version_data):
+            if not url:
+                continue
+            lib_path = LIBRARIES_DIR / path
+            if force or not (lib_path.is_file() and lib_path.stat().st_size > 0):
+                missing_libs.append((lib_path, url))
+
+        missing_assets = []
+        for obj in objects.values():
+            hash_val = obj["hash"]
+            subdir = hash_val[:2]
+            url = f"{RESSOURCE_MC_URL}/{subdir}/{hash_val}"
+            obj_path = OBJECTS_DIR / subdir / hash_val
+            if force or not (obj_path.is_file() and obj_path.stat().st_size > 0):
+                missing_assets.append((obj_path, url))
+
+        self.log("Checking libraries and assets...", "info")
+        self.log(
+            f"Verification complete! ({len(missing_libs)} libraries and {len(missing_assets)} assets to download)",
+            "info"
+        )
+
+        return (
+            self._download_batch("library", missing_libs)
+            and self._download_batch("asset", missing_assets)
+        )
 
     def _fetch_json(self, url):
         if self._cancel_event.is_set():
@@ -1407,17 +1424,20 @@ class App:
         try:
             self._urlretrieve(url, temp_path)
             if not temp_path.is_file() or temp_path.stat().st_size == 0:
-                raise IOError(f"Downloaded file is empty: {url}")
+                raise OSError(f"Downloaded file is empty: {url}")
             temp_path.replace(path)
         finally:
             temp_path.unlink(missing_ok=True)
 
-    def _download_version_jar(self, version_id, version_data, version_jar_path):
+    def _download_version_jar(self, version_id, version_data, version_jar_path, allow_library_fallback=True):
         client = version_data.get("downloads", {}).get("client")
         if client and client.get("url"):
             self._download_file(client["url"], version_jar_path)
             self.log(f"Downloaded {version_id}.jar", "success")
             return
+
+        if not allow_library_fallback:
+            raise FileNotFoundError(f"No client JAR download URL found in {version_id}.json")
 
         for relative_path, url in self._iter_library_artifacts(version_data):
             if not url:
@@ -1475,47 +1495,77 @@ class App:
         version_json_path = version_dir / f"{version_id}.json"
         version_jar_path = version_dir / f"{version_id}.jar"
 
-        if not check_dependencies:
-            with open(version_json_path, "r", encoding="utf-8") as data_file:
-                version_data = json.load(data_file)
-            version_data = self._resolve_local_version_data(version_id, version_data)
-            return version_data, version_jar_path
+        if not check_dependencies and not force and version_json_path.is_file() and version_jar_path.is_file():
+            try:
+                with open(version_json_path, encoding="utf-8") as data_file:
+                    local_version_data = json.load(data_file)
+                parent_paths = []
+                version_data = self._resolve_local_version_data(
+                    version_id, local_version_data, existing_parent_paths=parent_paths
+                )
+                asset_index = version_data.get("assetIndex", {})
+                asset_index_id = asset_index["id"]
+                asset_index_path = INDEXES_DIR / f"{asset_index_id}.json"
+                asset_index_valid = asset_index_path.is_file()
+                if asset_index_valid and asset_index.get("sha1"):
+                    asset_index_valid = self._has_sha1(asset_index_path, asset_index["sha1"])
+                if asset_index_valid:
+                    with open(asset_index_path, encoding="utf-8") as asset_file:
+                        json.load(asset_file)
+                    for parent_path in parent_paths:
+                        self.log(f"{parent_path.name} already present.", "info")
+                    self.log(f"{version_id}.json already present.", "info")
+                    self.log(f"{version_id}.jar already present.", "info")
+                    self.log(f"{asset_index_path.name} already present.", "info")
+                    return version_data, version_jar_path
+            except (OSError, json.JSONDecodeError, KeyError, TypeError):
+                pass
 
         version_dir.mkdir(parents=True, exist_ok=True)
 
         version_url = None
         version_sha1 = None
-        if force or not version_json_path.is_file():
-            version_info = next(
-                (v for v in self.version_manifest.get("versions", []) if v["id"] == version_id),
-                None
+        version_info = next(
+            (v for v in self.version_manifest.get("versions", []) if v["id"] == version_id),
+            None
+        )
+        if version_info is None:
+            if not version_json_path.is_file():
+                raise FileNotFoundError(f"Version {version_id} not found in the manifest")
+        else:
+            version_url = version_info["url"]
+            version_sha1 = version_info.get("sha1")
+
+        local_version_data = self._load_json_file(
+            version_json_path,
+            version_url,
+            version_sha1,
+            force=force and version_url is not None,
+        )
+        version_data = self._resolve_version_data(version_id, local_version_data)
+
+        if force or not self._is_valid_jar(version_jar_path):
+            is_installed_profile = self._is_installed_profile()
+            self._download_version_jar(
+                version_id,
+                version_data,
+                version_jar_path,
+                allow_library_fallback=not is_installed_profile,
             )
-            if version_info is None:
-                if not version_json_path.is_file():
-                    raise FileNotFoundError(f"Version {version_id} not found in the manifest")
-            else:
-                version_url = version_info["url"]
-                version_sha1 = version_info.get("sha1")
-
-        version_data = self._load_json_file(version_json_path, version_url, version_sha1, force=force and version_url is not None)
-        version_data = self._resolve_version_data(version_id, version_data)
-
-        if not self._is_valid_jar(version_jar_path) and check_dependencies:
-            self._download_version_jar(version_id, version_data, version_jar_path)
+        else:
+            self.log(f"{version_id}.jar already present.", "info")
 
         if not self._is_valid_jar(version_jar_path):
-            raise IOError(f"Invalid or empty version JAR: {version_jar_path}")
-
-        if not check_dependencies:
-            return version_data, version_jar_path
+            raise OSError(f"Invalid or empty version JAR: {version_jar_path}")
 
         asset_index_id = version_data["assetIndex"]["id"]
-        asset_index_path = INDEXES_DIR / f"{asset_index_id}.json"
         asset_index_url = version_data["assetIndex"]["url"]
+        asset_index_path = INDEXES_DIR / f"{asset_index_id}.json"
         asset_index = self._load_json_file(
             asset_index_path,
             asset_index_url,
             version_data["assetIndex"].get("sha1"),
+            force=force,
         )
         objects = asset_index.get("objects", {})
 
@@ -1524,7 +1574,9 @@ class App:
 
         return version_data, version_jar_path
 
-    def _resolve_local_version_data(self, version_id, version_data, _seen=None):
+    def _resolve_local_version_data(
+        self, version_id, version_data, _seen=None, existing_parent_paths=None
+    ):
         parent_id = version_data.get("inheritsFrom")
         if not parent_id:
             return version_data
@@ -1535,9 +1587,13 @@ class App:
         _seen.add(version_id)
 
         parent_path = VERSIONS_DIR / parent_id / f"{parent_id}.json"
-        with open(parent_path, "r", encoding="utf-8") as data_file:
+        if parent_path.is_file() and existing_parent_paths is not None:
+            existing_parent_paths.append(parent_path)
+        with open(parent_path, encoding="utf-8") as data_file:
             parent_data = json.load(data_file)
-        parent_data = self._resolve_local_version_data(parent_id, parent_data, _seen)
+        parent_data = self._resolve_local_version_data(
+            parent_id, parent_data, _seen, existing_parent_paths
+        )
 
         merged = dict(parent_data)
         merged.update({k: v for k, v in version_data.items() if k not in ("libraries", "arguments")})
@@ -1596,6 +1652,18 @@ class App:
             if not self._is_valid_jar(LIBRARIES_DIR / path)
         ]
 
+    def _show_error_and_wait(self, title, message):
+        closed = threading.Event()
+
+        def show():
+            try:
+                messagebox.showerror(title, message)
+            finally:
+                closed.set()
+
+        self.root.after(0, show)
+        closed.wait()
+
     def _is_installed_profile(self):
         return self.profile_var.get() == "installed"
 
@@ -1603,17 +1671,43 @@ class App:
         is_installed_profile = self._is_installed_profile()
 
         if is_installed_profile:
-            self.log(f"Initializing Installed version {version_id}...", "info")
+            has_installed_profile = not force and self.profile_manager.has_profile(version_id)
+            if has_installed_profile:
+                self.log(f"Profile {version_id} found, checking files...", "info")
+            else:
+                self.log(f"Initializing installed version {version_id}...", "info")
+
+            version_dir = VERSIONS_DIR / version_id
+            required_files = [version_dir / f"{version_id}.json"]
+            if has_installed_profile:
+                required_files.append(version_dir / f"{version_id}.jar")
+            missing_files = [path.name for path in required_files if not path.is_file()]
+            if missing_files:
+                for name in missing_files:
+                    self.log(f"Missing installed version file: {version_dir / name}", "error")
+                self._show_error_and_wait(
+                    "Installed version missing files",
+                    f"The version {version_id} is incomplete! Please reinstall.\n\n"
+                    "The profile for this version will be deleted, but this does not affect your save files!"
+                )
+                self.profile_manager.remove_profile(version_id)
+                self.log(f"Profile {version_id} removed!", "warn")
+                self.root.after(0, self._apply_installed_version_list)
+                raise _AbortLaunch()
+
             version_data, version_jar_path = self.load_local_version_data(
-                version_id, force=force, check_dependencies=True
+                version_id, force=force, check_dependencies=False
             )
+            self.log(f"Refreshing profile for {version_id}...", "info")
             self.profile_manager.create_or_update(version_id, profile_type="custom")
             return version_data, version_jar_path
 
         if not force and self.profile_manager.has_profile(version_id):
+            self.log(f"Profile {version_id} found, checking files...", "info")
             version_data, version_jar_path = self.load_local_version_data(
                 version_id, check_dependencies=False
             )
+            self.log(f"Refreshing profile for {version_id}...", "info")
             self.profile_manager.create_or_update(version_id)
             return version_data, version_jar_path
 
@@ -1626,18 +1720,28 @@ class App:
         if missing:
             raise FileNotFoundError(f"{len(missing)} missing librar{'y' if len(missing) == 1 else 'ies'}")
 
+        self.log(f"Creating profile for {version_id}...", "info")
         self.profile_manager.create_or_update(version_id)
 
         return version_data, version_jar_path
 
     def ensure_java_installed(self, major_version: int):
+        java_architecture = "x64"
 
         for item in JAVA_DIR.iterdir():
             if not item.is_dir():
                 continue
 
             name = item.name.lower()
-            if not name.startswith(f"zulu{major_version}"):
+            if (
+                not name.startswith(f"zulu{major_version}")
+                or not any(
+                    architecture in name
+                    for architecture in ("-x64", "_x64", "-amd64", "_amd64")
+                )
+                or "aarch64" in name
+                or "arm64" in name
+            ):
                 continue
 
             javaw = item / "bin" / "javaw.exe"
@@ -1652,6 +1756,7 @@ class App:
             f"{API_AZUL_URL}/metadata/v1/zulu/packages/"
             f"?java_version={major_version}"
             "&os=windows"
+            f"&arch={java_architecture}"
             "&java_package_type=jre"
             "&javafx_bundled=false"
         )
@@ -1659,7 +1764,7 @@ class App:
         packages = self._fetch_json(api_url)
 
         if not packages:
-            raise Exception(f"No Java package found for Java {major_version}")
+            raise RuntimeError(f"No Java package found for Java {major_version}")
 
         pkg = packages[0]
         download_url = pkg["download_url"]
@@ -1682,7 +1787,15 @@ class App:
                 continue
 
             name = item.name.lower()
-            if not name.startswith(f"zulu{major_version}"):
+            if (
+                not name.startswith(f"zulu{major_version}")
+                or not any(
+                    architecture in name
+                    for architecture in ("-x64", "_x64", "-amd64", "_amd64")
+                )
+                or "aarch64" in name
+                or "arm64" in name
+            ):
                 continue
 
             javaw = item / "bin" / "javaw.exe"
@@ -1691,7 +1804,7 @@ class App:
                 self.update_progress("Java installed!")
                 return javaw
 
-        raise Exception(f"No Java package found for Java {major_version}")
+        raise RuntimeError(f"No Java package found for Java {major_version}")
 
     def _current_os_name(self):
         system = platform.system().lower()
@@ -1701,7 +1814,7 @@ class App:
             return "linux"
         if system.startswith("darwin"):
             return "osx"
-        raise Exception(f"Unsupported OS: {system}")
+        raise RuntimeError(f"Unsupported OS: {system}")
 
     def _rules_allow(self, rules):
         if not rules:
@@ -1812,10 +1925,8 @@ class App:
             dialog.transient(self.root)
             dialog.grab_set()
             dialog.resizable(False, False)
-            try:
+            with contextlib.suppress(Exception):
                 dialog.iconbitmap(str(ASSETS / "icon" / "icon_64x64.ico"))
-            except Exception:
-                pass
 
             tk.Label(
                 dialog, text=summary, wraplength=440, justify="left",
@@ -1917,7 +2028,6 @@ class App:
         ):
             return
 
-        self.cancel_download = False
         self._cancel_event.clear()
         self.root.after(0, lambda: self.set_ui_state(False))
         self.root.after(0, lambda: self.launch_btn.config(state="normal", text="Stop repair"))
@@ -1926,8 +2036,9 @@ class App:
 
     def _repair_version_thread(self, version_id):
         try:
-            version_data, version_jar_path = self._get_version_ready(version_id, force=True)
+            self._get_version_ready(version_id, force=True)
             self.log(f"Version {version_id} repaired successfully!", "success")
+            self.update_progress("Repair complete!")
             self.root.after(0, lambda: messagebox.showinfo("Repair version", f"Version {version_id} has been repaired."))
         except _AbortLaunch:
             self.log("Repair canceled.", "info")
@@ -1943,7 +2054,6 @@ class App:
             self._cancel_or_stop()
             return
 
-        self.cancel_download = False
         self._cancel_event.clear()
         self._set_launch_button("Cancel", "normal")
         self.log("Starting preparation...", "info")
@@ -2074,26 +2184,7 @@ class App:
         if self._hidden_in_background:
             self.root.after(0, self._restore_window)
 
-    def _attempt_launch(self, version_id, ram, force=False):
-        is_installed_profile = self._is_installed_profile()
-        is_direct_launch = not force and self.profile_manager.has_profile(version_id)
-
-        button_label = "Stop repair" if force else "Cancel"
-        self._set_launch_button(button_label, "normal")
-
-        try:
-            version_data, version_jar_path = self._get_version_ready(version_id, force=force)
-        except _AbortLaunch:
-            raise
-        except Exception as e:
-            self.log(f"Unable to prepare the version {version_id}: {e}", "error")
-            return self._retry_or_abort(
-                version_id, ram,
-                title="Missing files",
-                summary=f"Some files required to launch Minecraft {version_id} are missing or corrupted.",
-                details=self._build_debug_report(e, app_info={"Minecraft version": version_id})
-            )
-
+    def _build_classpath(self, version_data, version_id, is_direct_launch):
         classpath = []
         seen_lib_paths = set()
         for path, _ in self._iter_library_artifacts(version_data):
@@ -2101,83 +2192,151 @@ class App:
                 continue
             seen_lib_paths.add(path)
             jar_path = LIBRARIES_DIR / path
-            if is_direct_launch:
-                classpath.append(str(jar_path))
-            elif self._is_valid_jar(jar_path):
+            if is_direct_launch or self._is_valid_jar(jar_path):
                 classpath.append(str(jar_path))
 
-        version_jar = VERSIONS_DIR / version_id / f"{version_id}.jar"
-        classpath.append(str(version_jar))
+        classpath.append(str(VERSIONS_DIR / version_id / f"{version_id}.jar"))
+        return os.pathsep.join(classpath)
 
-        cp_str = os.pathsep.join(classpath)
-        main_class = version_data.get("mainClass", "net.minecraft.client.main.Main")
+    def _prepare_java(self, version_id, version_data, is_direct_launch):
         java_major = self.get_required_java_version(version_data)
-
         cached_profile = self.profile_manager.get_profile(version_id) if is_direct_launch else None
         cached_java_path = cached_profile.get("javaPath") if cached_profile else None
         cached_java_major = cached_profile.get("javaMajor") if cached_profile else None
 
         self._set_launch_button("Loading...", "disabled")
         self.update_progress("Loading Java...")
-        if (
-            is_direct_launch and cached_java_path and cached_java_major == java_major
-            and Path(cached_java_path).exists()
-        ):
-            java_path = Path(cached_java_path)
-            natives_dir = NATIVES_DIR / version_id
-        else:
-            self.log(f"Preparing Java {java_major} runtime.", "info")
-            java_path = self.ensure_java_installed(java_major)
-            natives_dir = self.extract_natives(version_data)
-            self.profile_manager.create_or_update(
-                version_id, profile_type="custom" if is_installed_profile else "vanilla",
-                javaPath=str(java_path), javaMajor=java_major
+
+        if cached_java_path and cached_java_major == java_major and Path(cached_java_path).exists():
+            return Path(cached_java_path), java_major, NATIVES_DIR / version_id
+
+        self.log(f"Preparing Java {java_major} runtime.", "info")
+        java_path = self.ensure_java_installed(java_major)
+        natives_dir = self.extract_natives(version_data)
+        self.profile_manager.create_or_update(
+            version_id,
+            profile_type="custom" if self._is_installed_profile() else "vanilla",
+            javaPath=str(java_path),
+            javaMajor=java_major,
+        )
+        return java_path, java_major, natives_dir
+
+    def _authenticate(self):
+        if self.is_offline_var.get():
+            return self.username_var.get(), "0", "0"
+
+        self.update_progress("Signing in...")
+        account_name = self.selected_account_var.get()
+        account_data = self.account_manager.get_account_by_name(account_name)
+        refreshed = MicrosoftAuth(app=self).refresh_token(account_data) if account_data else None
+
+        if not refreshed:
+            name = account_name or "the selected account"
+            self.root.after(0, lambda: messagebox.showerror(
+                "Authentication Error",
+                f"Failed to refresh token for {name}.\nPlease log in again."
+            ))
+            raise _AbortLaunch()
+
+        token_keys = ("access_token", "refresh_token", "access_token_expires_at")
+        if any(refreshed.get(k) != account_data.get(k) for k in token_keys):
+            self.account_manager.update_account(refreshed)
+
+        self._update_account_prefs(last_used_account=refreshed["uuid"])
+        return refreshed["username"], refreshed["uuid"], refreshed["access_token"]
+
+    def _update_rpc_playing(self, version_id, active_user, uuid):
+        offline = self.is_offline_var.get()
+        self.rpc.update(
+            details=f"Playing Minecraft {version_id}",
+            small_image=(
+                "https://windowscraft76.fr/assets/minicube/steve_32x32.png"
+                if offline else f"https://mc-heads.net/avatar/{uuid}/32"
+            ),
+            small_text=f"Playing offline as {active_user}" if offline else f"Playing as {active_user}",
+        )
+
+    def _watch_game_output(self, game_process):
+        crash_pattern = "Failed to parse vanilla pack metadata"
+        known_crash_reason = None
+        log_tail = deque(maxlen=25)
+
+        for line in iter(game_process.stdout.readline, ""):
+            clean_line = line.strip("\n")
+            self.log(clean_line, "game")
+            log_tail.append(clean_line)
+            if crash_pattern in clean_line:
+                known_crash_reason = "Failed to parse vanilla pack metadata."
+                self.log("Corrupted pack metadata detected, stopping the game...", "error")
+                game_process.terminate()
+                break
+
+        return known_crash_reason, log_tail
+
+    def _handle_crash(self, version_id, ram, reason, launch_time, log_tail, exit_code, java_info, command):
+        crash_report_path = self._find_latest_crash_report(launch_time)
+
+        debug_text = None
+        if crash_report_path:
+            try:
+                with open(crash_report_path, encoding="utf-8", errors="replace") as f:
+                    debug_text = f.read()
+            except Exception:
+                crash_report_path = None
+
+        if debug_text is None:
+            error_text = reason
+            if log_tail:
+                error_text += "\n\nLast log lines:\n" + "\n".join(log_tail)
+            debug_text = self._build_debug_report(
+                error_text,
+                app_info={"Java version": java_info, "Exit code": exit_code, "Launch command": command},
             )
 
-        if self.is_offline_var.get():
-            active_user = self.username_var.get()
-            uuid = "0"
-            token = "0"
-        else:
-            self.update_progress("Signing in...")
-            account_name = self.selected_account_var.get()
-            account_data = self.account_manager.get_account_by_name(account_name)
+        return self._retry_or_abort(
+            version_id, ram,
+            title="Game crashed",
+            summary=reason,
+            details=debug_text,
+            report_path=crash_report_path,
+        )
 
-            auth = MicrosoftAuth(app=self)
-            refreshed = auth.refresh_token(account_data)
-            if refreshed:
-                account_data = refreshed
-                self.account_manager.remove_account(account_data['username'])
-                self.account_manager.add_account(account_data)
-            else:
-                self.root.after(0, lambda: messagebox.showerror(
-                    "Authentication Error",
-                    f"Failed to refresh token for {account_data.get('username')}.\nPlease log in again."
-                ))
-                raise _AbortLaunch()
+    def _attempt_launch(self, version_id, ram, force=False):
+        is_direct_launch = not force and self.profile_manager.has_profile(version_id)
 
-            active_user = account_data['username']
-            uuid = account_data['uuid']
-            token = account_data['access_token']
+        self._set_launch_button("Stop repair" if force else "Cancel", "normal")
 
-            self._update_account_prefs(last_used_account=uuid)
+        try:
+            version_data, _ = self._get_version_ready(version_id, force=force)
+        except _AbortLaunch:
+            raise
+        except Exception as e:
+            self.log(f"Unable to prepare the version {version_id}: {e}", "error")
+            return self._retry_or_abort(
+                version_id, ram,
+                title="An error occurred!",
+                summary=f"An error occurred while preparing version {version_id}.",
+                details=self._build_debug_report(e, app_info={"Minecraft version": version_id})
+            )
+
+        cp_str = self._build_classpath(version_data, version_id, is_direct_launch)
+        main_class = version_data.get("mainClass", "net.minecraft.client.main.Main")
+        java_path, java_major, natives_dir = self._prepare_java(version_id, version_data, is_direct_launch)
+        active_user, uuid, token = self._authenticate()
 
         jvm_args, game_args = self._build_jvm_and_game_args(
             version_data, version_id, natives_dir, cp_str, active_user, uuid, token
         )
-
-        args = [str(java_path), f"-Xms{ram}M", f"-Xmx{ram}M"] + jvm_args + [main_class] + game_args
+        args = [str(java_path), f"-Xms{ram}M", f"-Xmx{ram}M", *jvm_args, main_class, *game_args]
 
         safe_args = self._sanitize_args(args)
-        self.log(f"[Command] {' '.join(safe_args)}", "info")
+        command = " ".join(safe_args)
+        java_info = f"{java_major} ({java_path})"
+        self.log(f"[Command] {command}", "info")
 
         try:
             self.update_progress("Loading...")
-            self.rpc.update(
-                details=f"Playing Minecraft {version_id}",
-                small_image="https://windowscraft76.fr/assets/minicube/steve_32x32.png" if self.is_offline_var.get() else f"https://mc-heads.net/avatar/{uuid}/32",
-                small_text=f"Playing offline as {active_user}" if self.is_offline_var.get() else f"Playing as {active_user}"
-            )
+            self._update_rpc_playing(version_id, active_user, uuid)
             launch_time = time.strftime("%Y-%m-%d %H:%M:%S")
             game_process = subprocess.Popen(
                 args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -2195,24 +2354,10 @@ class App:
                 version_id, ram,
                 title="Launch error",
                 summary="Unable to start the Java process.",
-                details=self._build_debug_report(
-                    e, app_info={"Java version": f"{java_major} ({java_path})", "Command": " ".join(safe_args)}
-                )
+                details=self._build_debug_report(e, app_info={"Java version": java_info, "Command": command})
             )
 
-        known_crash_reason = None
-        crash_pattern = "Failed to parse vanilla pack metadata"
-        log_tail = deque(maxlen=25)
-
-        for line in iter(game_process.stdout.readline, ''):
-            clean_line = line.strip("\n")
-            self.log(clean_line, "game")
-            log_tail.append(clean_line)
-            if crash_pattern in clean_line:
-                known_crash_reason = "Failed to parse vanilla pack metadata (corrupted files)."
-                self.log("Corrupted pack metadata detected, stopping the game...", "error")
-                game_process.terminate()
-                break
+        known_crash_reason, log_tail = self._watch_game_output(game_process)
 
         game_process.wait()
         exit_code = game_process.returncode
@@ -2226,33 +2371,7 @@ class App:
         crashed = not self._game_stop_requested and (known_crash_reason is not None or exit_code not in (0, None))
         if crashed:
             reason = known_crash_reason or "The game closed unexpectedly."
-            crash_report_path = self._find_latest_crash_report(launch_time)
-
-            debug_text = None
-            if crash_report_path:
-                try:
-                    with open(crash_report_path, "r", encoding="utf-8", errors="replace") as f:
-                        debug_text = f.read()
-                except Exception:
-                    crash_report_path = None
-
-            if debug_text is None:
-                error_text = reason
-                if log_tail:
-                    error_text += "\n\nLast log lines:\n" + "\n".join(log_tail)
-                debug_text = self._build_debug_report(
-                    error_text,
-                    app_info={
-                        "Java version": f"{java_major} ({java_path})",
-                        "Exit code": exit_code,
-                        "Launch command": " ".join(safe_args),
-                    }
-                )
-
-            return self._retry_or_abort(
-                version_id, ram,
-                title="Game crashed",
-                summary=reason,
-                details=debug_text,
-                report_path=crash_report_path
+            return self._handle_crash(
+                version_id, ram, reason, launch_time, log_tail, exit_code, java_info, command
             )
+        return None

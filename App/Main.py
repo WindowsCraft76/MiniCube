@@ -1,14 +1,18 @@
-import tkinter as tk
-import sys
-import time
+import contextlib
+import re
 import socket
-import traceback
+import sys
 import threading
+import time
+import tkinter as tk
+import traceback
 from tkinter import messagebox
 from App import App
-from SplashScreen import SplashScreen
-from DiscordRPC import DiscordRPC
 from Config import LOGS_DIR, SINGLE_INSTANCE_PORT
+from DiscordRPC import DiscordRPC
+from SplashScreen import SplashScreen
+
+_ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 class Tee:
     def __init__(self, *files):
@@ -16,12 +20,16 @@ class Tee:
 
     def write(self, data):
         for f in self.files:
-            f.write(data)
+            output = data if f is sys.__stdout__ else _ANSI_ESCAPE.sub("", data)
+            f.write(output)
             f.flush()
 
     def flush(self):
         for f in self.files:
             f.flush()
+
+    def isatty(self):
+        return any(f.isatty() for f in self.files)
 
 def _acquire_single_instance():
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -65,7 +73,7 @@ def main():
 
         print("Starting MiniCube...")
 
-        sys.excepthook = lambda t, v, tb: traceback.print_exception(t, v, tb)
+        sys.excepthook = traceback.print_exception
 
         if hasattr(threading, "excepthook"):
             threading.excepthook = (
@@ -90,10 +98,8 @@ def main():
             if debug:
                 traceback.print_exc()
             messagebox.showerror("Startup Error", str(e))
-            try:
+            with contextlib.suppress(Exception):
                 instance_socket.close()
-            except Exception:
-                pass
             root.destroy()
 
     root.after(100, start_launcher)

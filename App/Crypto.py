@@ -2,21 +2,18 @@ import base64
 import secrets
 import keyring
 from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from Config import SALT_FILE, KEYRING_SERVICE, KEYRING_USERNAME
 
-from Config import SALT_FILE
-
-_KEYRING_SERVICE  = "MiniCube_v1_"
-_KEYRING_USERNAME = "account_secret"
 _FERNET: Fernet | None = None
 
 
 def _get_or_create_secret() -> bytes:
-    secret_hex = keyring.get_password(_KEYRING_SERVICE, _KEYRING_USERNAME)
+    secret_hex = keyring.get_password(KEYRING_SERVICE, KEYRING_USERNAME)
     if secret_hex is None:
         secret_hex = secrets.token_bytes(32).hex()
-        keyring.set_password(_KEYRING_SERVICE, _KEYRING_USERNAME, secret_hex)
+        keyring.set_password(KEYRING_SERVICE, KEYRING_USERNAME, secret_hex)
     return bytes.fromhex(secret_hex)
 
 

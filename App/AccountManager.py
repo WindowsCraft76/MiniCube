@@ -1,6 +1,6 @@
 import json
 from Config import ACCOUNTS_FILE
-from Crypto import encode_data, decode_data
+from Crypto import decode_data, encode_data
 
 class AccountManager:
     def __init__(self, app=None):
@@ -50,6 +50,16 @@ class AccountManager:
             self.app.log(
                 f"Account {account_data.get('username')} added to manager.", "success"
             )
+
+    def update_account(self, account_data: dict):
+        account_uuid = account_data.get("uuid")
+        for index, account in enumerate(self.accounts):
+            if account.get("uuid") == account_uuid:
+                self.accounts[index] = account_data
+                self.save_accounts()
+                return
+
+        self.add_account(account_data)
 
     def remove_account(self, username: str):
         self.accounts = [

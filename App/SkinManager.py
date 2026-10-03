@@ -41,10 +41,3 @@ def fetch_and_cache_head(uuid: str, skin_url: str, app=None) -> Path | None:
         if app:
             app.log(f"Failed to cache player head: {e}", "warn")
         return None
-
-
-def get_cached_head_path(uuid: str):
-    if not uuid:
-        return None
-    path = CACHE_DIR / f"{uuid}.png"
-    return path if path.exists() else None

@@ -2,11 +2,9 @@ import json
 from datetime import datetime, timezone
 from Config import LAUNCHER_PROFILES_FILE
 
-
 def _now_iso():
     now = datetime.now(timezone.utc)
     return now.strftime("%Y-%m-%dT%H:%M:%S.") + f"{now.microsecond // 1000:03d}Z"
-
 
 class ProfileManager:
 
@@ -21,7 +19,7 @@ class ProfileManager:
         if not self.path.exists():
             return {}
         try:
-            with open(self.path, "r", encoding="utf-8") as f:
+            with open(self.path, encoding="utf-8") as f:
                 data = json.load(f)
         except Exception:
             return {}
@@ -60,6 +58,9 @@ class ProfileManager:
 
     def remove_profile(self, version_id):
         profiles = self._load()
-        if version_id in profiles:
-            del profiles[version_id]
-            self._save(profiles)
+        remaining = {
+            key: profile for key, profile in profiles.items()
+            if key != version_id and profile.get("lastVersionId") != version_id
+        }
+        if len(remaining) != len(profiles):
+            self._save(remaining)

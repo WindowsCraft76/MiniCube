@@ -9,7 +9,7 @@ class DiscordRPC:
         self.rpc = None
         self.start_time = None
 
-    def _update(self, details: str, small_image: str = None, small_text: str = None):
+    def _update(self, details: str, small_image: str | None = None, small_text: str | None = None):
         if not self.rpc:
             return
         try:
@@ -45,7 +45,7 @@ class DiscordRPC:
                 self.app.log(f"Failed to connect to Discord RPC! {e}", "error")
             self.rpc = None
 
-    def update(self, details: str, small_image: str = None, small_text: str = None):
+    def update(self, details: str, small_image: str | None = None, small_text: str | None = None):
         self._update(details=details, small_image=small_image, small_text=small_text)
         if self.app:
             self.app.log("Updated Discord RPC presence", "info")
