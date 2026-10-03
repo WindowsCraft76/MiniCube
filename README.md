@@ -10,6 +10,9 @@
         <a href="https://windowscraft76.fr/minicube/r/license/"><img alt="License" src="https://img.shields.io/github/license/WindowsCraft76/MiniCube?style=for-the-badge"></a>
         <a href="https://www.python.org/downloads/release/python-3140/"><img alt="Python" src="https://img.shields.io/badge/python-3.14-blue?style=for-the-badge"></a>
         <a href="http://kofi.windowscraft76.fr/"><img alt="ko-fi" src="https://img.shields.io/badge/Support_me_on_Ko--fi-FF5A16?logo=ko-fi&logoColor=white&style=for-the-badge"></a>
+        <br>
+        <a href="https://windowscraft76.fr/minicube/help/"><img alt="Wiki" src="https://img.shields.io/badge/visit_the_wiki-8A2BE2?style=for-the-badge"></a>
+        <a href="https://windowscraft76.fr/minicube/r/discussions/"><img alt="Discussions" src="https://img.shields.io/badge/visit_the_discussions-red?style=for-the-badge"></a>
     </p>
     <p>
         <b>A lightweight and simple Minecraft launcher.</b><br>
