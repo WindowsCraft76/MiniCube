@@ -22,6 +22,7 @@ from Config import (
     ASSETS,
     ASSETS_DIR,
     CACHE_DIR,
+    CONNECTIVITY_CHECK_INTERVAL_MS,
     DISCLAIMER_URL,
     DOWNLOADLAST_URL,
     GAME_DIR,
@@ -49,6 +50,7 @@ from Config import (
 )
 from DiscordRPC import DiscordRPC
 from MicrosoftAuth import MicrosoftAuth
+from Network import is_online
 from ProfileManager import ProfileManager
 from SplashScreen import center_window
 from VersionManager import (
@@ -74,6 +76,7 @@ class App:
         self.log_buffer = []
 
         self.game_process = None
+        self._playing_username = None
         self._game_stop_requested = False
         self._game_started_at = None
         self._game_status_after_id = None
@@ -84,6 +87,11 @@ class App:
 
         self._ui_ready = False
         self._pending_update_version = None
+
+        self.no_internet = not is_online()
+        self._pending_no_internet_popup = False
+        self._notifications = {}
+        self._connectivity_after_id = None
         self.root.bind("<Map>", self._on_first_map, add="+")
 
         self.profile_var = tk.StringVar(value="vanilla")
@@ -138,9 +146,14 @@ class App:
         help.add_command(label="Report Issue", command=lambda: webbrowser.open(f"{ISSUES_URL}"))
         self.toolbar.add_cascade(label="Help", menu=help)
 
-        self.root.config(menu=self.toolbar)
-
         self.UPDATE_LABEL = "New update available"
+        self.NO_INTERNET_LABEL = "No internet"
+
+        self.toolbar.add_command(label=" ", state="disabled")
+        self._notif_anchor_index = self.toolbar.index("end")
+
+        self.root.config(menu=self.toolbar)
+        self.root.after(500, self._right_align_notifications)
 
         self.start_launch_sequence()
 
@@ -179,7 +192,7 @@ class App:
 
         self.load_settings()
 
-        if self.discord_rpc_var.get():
+        if self.discord_rpc_var.get() and not self.no_internet:
             self.rpc.start_rpc()
 
         self.log("Loading interface...", "info")
@@ -366,6 +379,7 @@ class App:
 
         self.repair_btn = tk.Button(btn_frame, text="Repair version", command=self._confirm_repair_selected_version)
         self.repair_btn.pack(side=tk.LEFT, padx=5)
+        self._sync_online_widgets()
 
         if self._ui_locked:
             self.ram_spin.config(state="disabled")
@@ -490,6 +504,7 @@ class App:
 
         self.add_account_btn = tk.Button(btn_frame, text="Add account", command=self.add_microsoft_account)
         self.add_account_btn.pack(side=tk.LEFT, padx=5)
+        self._sync_online_widgets()
 
         self.refresh_account_listbox()
 
@@ -501,6 +516,10 @@ class App:
         self.acc_win = None
 
     def add_microsoft_account(self):
+        if self.no_internet:
+            messagebox.showwarning("Add account", "You are offline.\nAdding an account requires an internet connection.")
+            return
+
         if hasattr(self, "add_account_btn"):
             self.add_account_btn.config(state="disabled")
 
@@ -543,7 +562,7 @@ class App:
         self.connecting_win = None
 
         if hasattr(self, "add_account_btn"):
-            self.add_account_btn.config(state="normal")
+            self.add_account_btn.config(state=self._online_only_state())
 
         if account_data:
             self.account_manager.add_account(account_data)
@@ -678,7 +697,11 @@ class App:
         is_default = (uuid == self.default_account)
 
         menu = tk.Menu(self.acc_win, tearoff=0)
-        menu.add_command(label="Refresh token", command=lambda: self._refresh_selected_account_token(username))
+        menu.add_command(
+            label="Refresh token",
+            state="disabled" if self.no_internet else "normal",
+            command=lambda: self._refresh_selected_account_token(username),
+        )
         if is_default:
             menu.add_command(label="Remove default account", command=lambda: self._unset_default_account(uuid))
         else:
@@ -702,6 +725,10 @@ class App:
         self.refresh_account_listbox()
 
     def _refresh_selected_account_token(self, username):
+        if self.no_internet:
+            messagebox.showwarning("Refresh token", "You are offline.\nRefreshing a token requires an internet connection.")
+            return
+
         account_data = self.account_manager.get_account_by_name(username)
         if not account_data:
             return
@@ -727,6 +754,13 @@ class App:
         threading.Thread(target=worker, daemon=True).start()
 
     def _delete_account(self, username):
+        if self._minecraft_running() and username == self._playing_username:
+            messagebox.showwarning(
+                "Delete account",
+                f"{username} is currently playing.\nStop the game before deleting this account."
+            )
+            return
+
         if not messagebox.askyesno("Delete account", f"Delete account {username}?"):
             return
 
@@ -881,7 +915,7 @@ class App:
 
     def _apply_discord_rpc(self):
         running = self.rpc.is_running()
-        if self.discord_rpc_var.get():
+        if self.discord_rpc_var.get() and not self.no_internet:
             if not running:
                 self.rpc.start_rpc()
         elif running:
@@ -952,6 +986,19 @@ class App:
         threading.Thread(target=self._launch_sequence_worker, daemon=True).start()
 
     def _launch_sequence_worker(self):
+        self.log("Starting up...", "info")
+
+        if self.no_internet:
+            self.log("No internet connection!", "warn")
+            self.root.after(0, self._enter_offline_ui)
+        else:
+            self._run_online_tasks()
+
+        self.root.after(0, self._schedule_connectivity_check)
+
+        self.log("Startup checks complete.", "info")
+
+    def _run_online_tasks(self, previous_version=None):
         def run_update_check():
             try:
                 self.check_version_mismatch()
@@ -962,7 +1009,7 @@ class App:
         def run_manifest_fetch():
             try:
                 if self._fetch_version_manifest():
-                    self.root.after(0, self._apply_version_list_to_ui)
+                    self.root.after(0, lambda: self._apply_version_list_keeping(previous_version))
                 else:
                     self.root.after(0, lambda: self._set_version_list([], error=True))
             except Exception as e:
@@ -970,7 +1017,6 @@ class App:
                     self.log(f"Error loading versions! ({e})", "error")
                 self.root.after(0, lambda: self._set_version_list([], error=True))
 
-        self.log("Starting up...", "info")
         threads = [
             threading.Thread(target=run_update_check, daemon=True),
             threading.Thread(target=run_manifest_fetch, daemon=True),
@@ -979,7 +1025,6 @@ class App:
             t.start()
         for t in threads:
             t.join()
-        self.log("Startup checks complete.", "info")
 
     def _find_toolbar_index_by_label(self, label):
         try:
@@ -1002,15 +1047,18 @@ class App:
             return
         self._ui_ready = True
         self.root.unbind("<Map>")
+        self.root.after(50, self._right_align_notifications)
+        if self._pending_no_internet_popup:
+            self._pending_no_internet_popup = False
+            self._show_no_internet_info()
         if self._pending_update_version:
             remote_version, remote_numeric, remote_type = self._pending_update_version
             self._pending_update_version = None
             self._show_update_popup(remote_version, remote_numeric, remote_type)
 
     def _add_update_toolbar_entry(self, remote_version, remote_numeric, remote_type):
-        if self._find_toolbar_index_by_label(self.UPDATE_LABEL) is None:
-            update_page_url = get_update_page_url()
-            self.toolbar.add_command(label=self.UPDATE_LABEL, command=lambda: webbrowser.open(update_page_url))
+        update_page_url = get_update_page_url()
+        self._set_notification("update", self.UPDATE_LABEL, lambda: webbrowser.open(update_page_url))
 
         if self._ui_ready:
             self._show_update_popup(remote_version, remote_numeric, remote_type)
@@ -1054,10 +1102,215 @@ class App:
         popup.geometry(f"+{x}+{y}")
 
     def _remove_update_toolbar_entry(self):
-        idx = self._find_toolbar_index_by_label(self.UPDATE_LABEL)
-        if idx is not None:
+        self._clear_notification("update")
+
+    def _set_notification(self, key, label, command):
+        self._notifications = {key: (label, command)}
+        self._render_notifications()
+
+    def _clear_notification(self, key):
+        if key in self._notifications:
+            self._notifications = {}
+            self._render_notifications()
+
+    def _render_notifications(self):
+        with contextlib.suppress(Exception):
+            end = self.toolbar.index("end")
+            for i in range(end, self._notif_anchor_index, -1):
+                self.toolbar.delete(i)
+            for label, command in self._notifications.values():
+                self.toolbar.add_command(label=label, command=command)
+        self._right_align_notifications()
+        self.root.after(250, self._right_align_notifications)
+
+    def _right_align_notifications(self):
+        if os.name != "nt":
+            return
+        job = getattr(self, "_align_after_id", None)
+        if job is not None:
             with contextlib.suppress(Exception):
-                self.toolbar.delete(idx)
+                self.root.after_cancel(job)
+        self._align_after_id = self.root.after(60, self._apply_right_align)
+
+    def _resolve_root_hwnd(self):
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.windll.user32
+        GA_ROOT = 2
+        user32.GetAncestor.argtypes = [wintypes.HWND, wintypes.UINT]
+        user32.GetAncestor.restype = wintypes.HWND
+        user32.GetMenu.argtypes = [wintypes.HWND]
+        user32.GetMenu.restype = wintypes.HMENU
+
+        candidates = []
+        with contextlib.suppress(Exception):
+            frame = self.root.wm_frame()
+            if frame:
+                candidates.append(int(frame, 16))
+        with contextlib.suppress(Exception):
+            candidates.append(user32.GetAncestor(self.root.winfo_id(), GA_ROOT))
+
+        for hwnd in candidates:
+            if hwnd and user32.GetMenu(hwnd):
+                return hwnd
+        return candidates[0] if candidates else 0
+
+    def _apply_right_align(self):
+        self._align_after_id = None
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            class MENUITEMINFOW(ctypes.Structure):
+                _fields_ = [
+                    ("cbSize", wintypes.UINT), ("fMask", wintypes.UINT),
+                    ("fType", wintypes.UINT), ("fState", wintypes.UINT),
+                    ("wID", wintypes.UINT), ("hSubMenu", wintypes.HMENU),
+                    ("hbmpChecked", wintypes.HBITMAP), ("hbmpUnchecked", wintypes.HBITMAP),
+                    ("dwItemData", ctypes.c_size_t), ("dwTypeData", wintypes.LPWSTR),
+                    ("cch", wintypes.UINT), ("hbmpItem", wintypes.HBITMAP),
+                ]
+
+            user32 = ctypes.windll.user32
+            user32.GetMenu.argtypes = [wintypes.HWND]
+            user32.GetMenu.restype = wintypes.HMENU
+            user32.GetMenuItemCount.argtypes = [wintypes.HMENU]
+            user32.GetMenuItemInfoW.argtypes = [wintypes.HMENU, wintypes.UINT, wintypes.BOOL, ctypes.POINTER(MENUITEMINFOW)]
+            user32.SetMenuItemInfoW.argtypes = [wintypes.HMENU, wintypes.UINT, wintypes.BOOL, ctypes.POINTER(MENUITEMINFOW)]
+            user32.DrawMenuBar.argtypes = [wintypes.HWND]
+
+            hwnd = self._resolve_root_hwnd()
+            if not hwnd:
+                if self.debug:
+                    self.log("Notification align: no window handle found.", "debug")
+                return
+            hmenu = user32.GetMenu(hwnd)
+            if not hmenu:
+                if self.debug:
+                    self.log("Notification align: GetMenu returned no native menu.", "debug")
+                return
+
+            MIIM_FTYPE = 0x00000100
+            MFT_RIGHTJUSTIFY = 0x00004000
+            item_count = user32.GetMenuItemCount(hmenu)
+            if item_count <= self._notif_anchor_index:
+                return
+
+            applied = 0
+            for pos in range(self._notif_anchor_index, item_count):
+                info = MENUITEMINFOW()
+                info.cbSize = ctypes.sizeof(MENUITEMINFOW)
+                info.fMask = MIIM_FTYPE
+                if not user32.GetMenuItemInfoW(hmenu, pos, True, ctypes.byref(info)):
+                    continue
+                info.fType |= MFT_RIGHTJUSTIFY
+                if user32.SetMenuItemInfoW(hmenu, pos, True, ctypes.byref(info)):
+                    applied += 1
+            user32.DrawMenuBar(hwnd)
+            if self.debug:
+                self.log(f"Notification align: flagged {applied}/{item_count - self._notif_anchor_index} item(s).", "debug")
+        except Exception as e:
+            if self.debug:
+                self.log(f"Notification align failed: {e}", "debug")
+
+    def _online_only_state(self, enabled=True):
+        return "normal" if enabled and not self.no_internet else "disabled"
+
+    def _sync_online_widgets(self):
+        widgets_enabled = {
+            "repair_btn": not self._ui_locked,
+            "add_account_btn": True,
+        }
+        for name, enabled in widgets_enabled.items():
+            widget = getattr(self, name, None)
+            if widget is None:
+                continue
+            with contextlib.suppress(Exception):
+                if widget.winfo_exists():
+                    widget.config(state=self._online_only_state(enabled))
+
+    def _show_no_internet_info(self):
+        message = (
+            "Internet connection lost!\n"
+            "It seems to only play the version that is already installed."
+        )
+        messagebox.showwarning("No internet connection", message, parent=self.root)
+
+    def _enter_offline_ui(self):
+        self._set_notification("internet", self.NO_INTERNET_LABEL, self._show_no_internet_info)
+        self.refresh_version_list()
+        self._sync_snapshot_check_state()
+        self._sync_online_widgets()
+        if self._ui_ready:
+            self._show_no_internet_info()
+        else:
+            self._pending_no_internet_popup = True
+
+    def _schedule_connectivity_check(self):
+        self._connectivity_after_id = self.root.after(
+            CONNECTIVITY_CHECK_INTERVAL_MS, self._connectivity_tick
+        )
+
+    def _connectivity_tick(self):
+        def worker():
+            online = is_online()
+            self.root.after(0, lambda: self._on_connectivity_result(online))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_connectivity_result(self, online):
+        self._set_no_internet(not online)
+        self._schedule_connectivity_check()
+
+    def _set_no_internet(self, value):
+        if value == self.no_internet:
+            return
+        self.no_internet = value
+
+        if value:
+            self.log("Internet connection lost!", "warn")
+            self._set_notification("internet", self.NO_INTERNET_LABEL, self._show_no_internet_info)
+            self._show_no_internet_info()
+            if self.rpc and self.rpc.is_running():
+                self.rpc.stop_rpc()
+            if not self._ui_locked:
+                self.refresh_version_list()
+        else:
+            self.log("Internet connection restored!", "success")
+            self._clear_notification("internet")
+            if self.discord_rpc_var.get():
+                self.rpc.start_rpc()
+            previous = self.version_var.get()
+            threading.Thread(target=self._run_online_tasks, args=(previous,), daemon=True).start()
+
+        self._sync_snapshot_check_state()
+        self._sync_online_widgets()
+
+    def _apply_version_list_keeping(self, previous_version=None):
+        if self.no_internet:
+            return
+        if previous_version is not None and (self._is_installed_profile() or self._ui_locked):
+            return
+        self._apply_version_list_to_ui()
+        if previous_version and previous_version in self.version_menu["values"]:
+            self.version_var.set(previous_version)
+
+    def _apply_offline_vanilla_list(self):
+        try:
+            profiles = self.profile_manager.get_all_profiles()
+        except Exception as e:
+            self.log(f"Error loading profiles! {e}", "error")
+            self._set_version_list([], error=True)
+            return
+
+        entries = [
+            (profile.get("lastUsed", ""), profile.get("lastVersionId", key))
+            for key, profile in profiles.items()
+            if profile.get("type") == "vanilla"
+        ]
+        entries.sort(reverse=True)
+        self._set_version_list([version_id for _, version_id in entries])
 
     _VERSION_PLACEHOLDERS = ("Loading...", "No version found", "Error")
 
@@ -1073,7 +1326,7 @@ class App:
             self.snapshot_link.pack_forget()
             if not self.snapshot_check.winfo_ismapped():
                 self.snapshot_check.pack(before=self.launch_btn, pady=(3, 0))
-            self.snapshot_check.config(state="disabled" if self._ui_locked else "normal")
+            self.snapshot_check.config(state="disabled" if (self._ui_locked or self.no_internet) else "normal")
 
     def _sync_version_menu_state(self):
         if self.version_var.get() in self._VERSION_PLACEHOLDERS:
@@ -1135,6 +1388,10 @@ class App:
             self._apply_installed_version_list()
             return
 
+        if self.no_internet:
+            self._apply_offline_vanilla_list()
+            return
+
         if self._fetch_version_manifest():
             self._apply_version_list_to_ui()
         else:
@@ -1162,6 +1419,10 @@ class App:
         return self.version_var.get()
 
     def _fetch_version_manifest(self) -> bool:
+        if self.no_internet:
+            self.log("Offline: version manifest not fetched.", "warn")
+            return False
+
         self.log("Fetching version manifest...", "info")
 
         try:
@@ -1216,8 +1477,10 @@ class App:
                 self.profile_menu.entryconfig(profile_index, state=normal_state)
 
         self.root.config(menu=self.toolbar)
+        self._right_align_notifications()
 
         self.account_menu.config(state=combo_state)
+        self.root.after(250, self._right_align_notifications)
         self._sync_version_menu_state()
 
         self.offline_entry.config(state=normal_state)
@@ -1235,8 +1498,10 @@ class App:
         if hasattr(self, "keep_open_check") and self.keep_open_check.winfo_exists():
             self.keep_open_check.config(state=normal_state)
 
-        if hasattr(self, "repair_btn") and self.repair_btn and self.repair_btn.winfo_exists():
-            self.repair_btn.config(state=normal_state)
+        self._sync_online_widgets()
+
+        if enabled:
+            self.refresh_version_list()
 
     def update_progress(self, text=""):
         if text:
@@ -1667,7 +1932,59 @@ class App:
     def _is_installed_profile(self):
         return self.profile_var.get() == "installed"
 
+    def _get_version_ready_offline(self, version_id):
+        self.log(f"Offline: checking version files for {version_id}...", "info")
+        version_dir = VERSIONS_DIR / version_id
+        json_path = version_dir / f"{version_id}.json"
+        jar_path = version_dir / f"{version_id}.jar"
+
+        missing = []
+        version_data = None
+
+        if not json_path.is_file():
+            missing.append(json_path.name)
+        if not self._is_valid_jar(jar_path):
+            missing.append(jar_path.name)
+
+        if not missing:
+            try:
+                with open(json_path, encoding="utf-8") as data_file:
+                    local_data = json.load(data_file)
+                version_data = self._resolve_local_version_data(version_id, local_data)
+            except (OSError, json.JSONDecodeError) as e:
+                self.log(f"Unreadable version file: {e}", "error")
+                missing.append(json_path.name)
+
+        if version_data is not None:
+            asset_id = version_data.get("assetIndex", {}).get("id")
+            index_path = INDEXES_DIR / f"{asset_id}.json" if asset_id else None
+            if index_path is None or not index_path.is_file():
+                missing.append(index_path.name if index_path else "asset index")
+
+        if missing:
+            for name in missing:
+                self.log(f"Missing file for {version_id}: {name}", "error")
+            shown = "\n".join(f"- {name}" for name in missing[:8])
+            if len(missing) > 8:
+                shown += f"\n- ... and {len(missing) - 8} more"
+            self._show_error_and_wait(
+                "Missing version files",
+                f"{version_id} cannot be launched offline, some files are missing:\n\n{shown}\n\n"
+                "Go back online and restart MiniCube to download or repair them."
+            )
+            raise _AbortLaunch()
+
+        self.log(f"All files for {version_id} are present.", "success")
+        self.profile_manager.create_or_update(
+            version_id,
+            profile_type="custom" if self._is_installed_profile() else "vanilla",
+        )
+        return version_data, jar_path
+
     def _get_version_ready(self, version_id, force=False):
+        if self.no_internet:
+            return self._get_version_ready_offline(version_id)
+
         is_installed_profile = self._is_installed_profile()
 
         if is_installed_profile:
@@ -1725,9 +2042,7 @@ class App:
 
         return version_data, version_jar_path
 
-    def ensure_java_installed(self, major_version: int):
-        java_architecture = "x64"
-
+    def _find_local_java(self, major_version: int):
         for item in JAVA_DIR.iterdir():
             if not item.is_dir():
                 continue
@@ -1746,8 +2061,16 @@ class App:
 
             javaw = item / "bin" / "javaw.exe"
             if javaw.exists():
-                self.log(f"Java {major_version} already present", "info")
                 return javaw
+        return None
+
+    def ensure_java_installed(self, major_version: int):
+        java_architecture = "x64"
+
+        javaw = self._find_local_java(major_version)
+        if javaw:
+            self.log(f"Java {major_version} already present", "info")
+            return javaw
 
         self.log(f"Downloading Java {major_version}...", "info")
         self.update_progress("Downloading Java...")
@@ -1782,27 +2105,11 @@ class App:
 
         zip_path.unlink(missing_ok=True)
 
-        for item in JAVA_DIR.iterdir():
-            if not item.is_dir():
-                continue
-
-            name = item.name.lower()
-            if (
-                not name.startswith(f"zulu{major_version}")
-                or not any(
-                    architecture in name
-                    for architecture in ("-x64", "_x64", "-amd64", "_amd64")
-                )
-                or "aarch64" in name
-                or "arm64" in name
-            ):
-                continue
-
-            javaw = item / "bin" / "javaw.exe"
-            if javaw.exists():
-                self.log(f"Java {major_version} installed successfully!", "success")
-                self.update_progress("Java installed!")
-                return javaw
+        javaw = self._find_local_java(major_version)
+        if javaw:
+            self.log(f"Java {major_version} installed successfully!", "success")
+            self.update_progress("Java installed!")
+            return javaw
 
         raise RuntimeError(f"No Java package found for Java {major_version}")
 
@@ -2003,6 +2310,11 @@ class App:
     def _retry_or_abort(self, version_id, ram, title="Launch error", summary="", details="", report_path=None):
         choice = self._show_launch_error_dialog(title, summary, details, report_path=report_path)
 
+        if choice == "repair" and self.no_internet:
+            self.log("Repair is unavailable while offline.", "warn")
+            self._show_error_and_wait("Repair version", "You are offline.\nRepairing a version requires an internet connection.")
+            raise _AbortLaunch()
+
         if choice == "repair":
             self.log(f"Preparing to repair Minecraft {version_id}...", "info")
             return self._attempt_launch(version_id, ram, force=True)
@@ -2013,6 +2325,10 @@ class App:
         raise _AbortLaunch()
 
     def _confirm_repair_selected_version(self):
+        if self.no_internet:
+            messagebox.showwarning("Repair version", "You are offline.\nRepairing a version requires an internet connection.")
+            return
+
         version_id = self._get_selected_version_id()
         if not version_id:
             messagebox.showwarning("Repair version", "No version selected.")
@@ -2179,7 +2495,8 @@ class App:
         self.root.after(0, lambda: self.launch_btn.config(text="Play"))
         self.root.after(0, lambda: self.set_ui_state(True))
         self.log("=== Game finished ===", "info")
-        self.rpc.update(details="In the launcher")
+        if self.rpc.is_running():
+            self.rpc.update(details="In the launcher")
 
         if self._hidden_in_background:
             self.root.after(0, self._restore_window)
@@ -2198,9 +2515,42 @@ class App:
         classpath.append(str(VERSIONS_DIR / version_id / f"{version_id}.jar"))
         return os.pathsep.join(classpath)
 
-    def _prepare_java(self, version_id, version_data, is_direct_launch):
+    def _prepare_java_offline(self, version_id, version_data):
         java_major = self.get_required_java_version(version_data)
-        cached_profile = self.profile_manager.get_profile(version_id) if is_direct_launch else None
+        self._set_launch_button("Loading...", "disabled")
+        self.update_progress("Checking Java...")
+
+        cached_profile = self.profile_manager.get_profile(version_id) or {}
+        cached_path = cached_profile.get("javaPath")
+
+        if not cached_path or not Path(cached_path).exists():
+            self.log(f"Java path missing or invalid for {version_id}: {cached_path!r}", "error")
+            self._show_error_and_wait(
+                "Java not found",
+                f"No valid Java runtime is recorded for {version_id}.\n"
+                "Go back online and launch this version once to set it up."
+            )
+            raise _AbortLaunch()
+
+        java_path = Path(cached_path)
+        if cached_profile.get("javaMajor") != java_major:
+            self.log(
+                f"Warning: saved Java for {version_id} is major "
+                f"{cached_profile.get('javaMajor')!r}, version requires {java_major}.",
+                "warn",
+            )
+
+        natives_dir = NATIVES_DIR / version_id
+        if not natives_dir.is_dir() or not any(natives_dir.iterdir()):
+            natives_dir = self.extract_natives(version_data)
+        return java_path, java_major, natives_dir
+
+    def _prepare_java(self, version_id, version_data, is_direct_launch):
+        if self.no_internet:
+            return self._prepare_java_offline(version_id, version_data)
+
+        java_major = self.get_required_java_version(version_data)
+        cached_profile = self.profile_manager.get_profile(version_id)
         cached_java_path = cached_profile.get("javaPath") if cached_profile else None
         cached_java_major = cached_profile.get("javaMajor") if cached_profile else None
 
@@ -2225,6 +2575,19 @@ class App:
         if self.is_offline_var.get():
             return self.username_var.get(), "0", "0"
 
+        if self.no_internet:
+            account_name = self.selected_account_var.get()
+            saved = self.account_manager.get_account_by_name(account_name)
+            if not saved or not saved.get("access_token") or not saved.get("uuid"):
+                self._show_error_and_wait(
+                    "Authentication Error",
+                    "No saved session for this account.\nConnect to the internet to sign in."
+                )
+                raise _AbortLaunch()
+            self.log("Offline: using the last saved token (no refresh).", "warn")
+            self._update_account_prefs(last_used_account=saved["uuid"])
+            return saved["username"], saved["uuid"], saved["access_token"]
+
         self.update_progress("Signing in...")
         account_name = self.selected_account_var.get()
         account_data = self.account_manager.get_account_by_name(account_name)
@@ -2246,6 +2609,8 @@ class App:
         return refreshed["username"], refreshed["uuid"], refreshed["access_token"]
 
     def _update_rpc_playing(self, version_id, active_user, uuid):
+        if not self.rpc.is_running():
+            return
         offline = self.is_offline_var.get()
         self.rpc.update(
             details=f"Playing Minecraft {version_id}",
@@ -2344,6 +2709,7 @@ class App:
             )
             self._game_stop_requested = False
             self.game_process = game_process
+            self._playing_username = active_user
             self._game_started_at = time.monotonic()
             self.log(f"Game started (PID {game_process.pid}) as {active_user}.", "success")
             self._set_launch_button("Stop", "normal")
@@ -2365,6 +2731,7 @@ class App:
         self._stop_game_status_timer()
         self._game_started_at = None
         self.game_process = None
+        self._playing_username = None
         self.update_progress(f"Closed game - You played for {self.format_duration(played_for)}")
         self.log(f"Java process ended with exit code {exit_code}.", "info")
 
