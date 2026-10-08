@@ -1405,10 +1405,15 @@ class App:
             self._set_version_list([], error=True)
             return
 
-        self.installed_profiles_map = {
-            profile.get("lastVersionId", key): profile.get("lastVersionId", key)
+        installed_profiles = [
+            (profile.get("lastUsed", "") or "", profile.get("lastVersionId", key))
             for key, profile in profiles.items()
             if profile.get("type") == "custom"
+        ]
+        installed_profiles.sort(reverse=True)
+        self.installed_profiles_map = {
+            version_id: version_id
+            for _, version_id in installed_profiles
         }
 
         self._set_version_list(list(self.installed_profiles_map.keys()))
@@ -1447,7 +1452,7 @@ class App:
             ):
                 items.append(v)
 
-        items.sort(key=lambda v: v["releaseTime"], reverse=True)
+        items.sort(key=lambda version: version["releaseTime"], reverse=True)
         version_ids = [v["id"] for v in items]
 
         self._set_version_list(version_ids)
