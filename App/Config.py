@@ -8,6 +8,7 @@ META_DIR = BASE_DIR / "Meta"
 GAME_DIR = BASE_DIR / "GameFile"
 DATA_DIR = BASE_DIR / "Data"
 LOGS_DIR = BASE_DIR / "Logs"
+TEMP_DIR = BASE_DIR / "Temp"
 
 VERSIONS_DIR = META_DIR / "versions"
 ASSETS_DIR = META_DIR / "assets"
@@ -23,12 +24,12 @@ SETTINGS_FILE = DATA_DIR / "settings.json"
 ACCOUNTS_FILE = DATA_DIR / "accounts.pem"
 SALT_FILE = DATA_DIR / ".salt"
 
-for _d in [
+for i in [
     META_DIR, DATA_DIR, GAME_DIR, VERSIONS_DIR, ASSETS_DIR,
     LIBRARIES_DIR, INDEXES_DIR, OBJECTS_DIR, JAVA_DIR, NATIVES_DIR, LOGS_DIR,
-    CACHE_DIR,
+    CACHE_DIR, TEMP_DIR
 ]:
-    _d.mkdir(parents=True, exist_ok=True)
+    i.mkdir(parents=True, exist_ok=True)
 
 HEAD_ICON_SIZE = 64
 
@@ -66,11 +67,11 @@ REGISTRY_KEY_PATH = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\MiniCu
 REGISTRY_VALUE_NAME = "DisplayVersion"
 
 UPDATE_POPUP_MESSAGES = {
-    "release": "A new version is available! ({version})\n\nDo you want to open the download page?",
-    "hotfix": "A new patch version is available! ({version})\nIt is recommended to update as soon as possible.\n\nDo you want to open the download page?",
-    "beta": "A new beta version is available! ({version})\n\nDo you want to open the download page?",
+    "release": "A new version is available! ({version})\n\nDo you want to update now?",
+    "hotfix": "A new patch version is available! ({version})\nIt is recommended to update as soon as possible.\n\nDo you want to update now?",
+    "beta": "A new beta version is available! ({version})\n\nDo you want to update now?",
 }
-UPDATE_POPUP_MESSAGE_DEFAULT = "A new version is available! ({version})\n\nDo you want to open the download page?"
+UPDATE_POPUP_MESSAGE_DEFAULT = "A new version is available! ({version})\n\nDo you want to update now?"
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "

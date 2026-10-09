@@ -1,5 +1,7 @@
 import re
 import requests
+import platform
+from urllib.parse import urljoin
 from Config import API_URL, DOWNLOADLAST_URL, REGISTRY_KEY_PATH, REGISTRY_VALUE_NAME
 
 try:
@@ -197,6 +199,7 @@ def check_for_update(beta_fallback: bool = True):
     local_key = strip_version_decorators(local_raw_version) or local_raw_version
 
     remote_type = "None"
+    download_url = ""
     local_display_version = format_local_version_for_display(local_raw_version)
 
     try:
@@ -206,6 +209,7 @@ def check_for_update(beta_fallback: bool = True):
         if entry:
             remote_numeric, version_type, remote_display_version = entry
             remote_type = (version_type or "release").capitalize()
+            download_url = get_download_url(catalog, remote_numeric)
         else:
             remote_numeric = "No version found"
             remote_display_version = "No version found"
@@ -228,8 +232,44 @@ def check_for_update(beta_fallback: bool = True):
         "remote_type": remote_type,
         "update_available": update_available,
         "is_first_install": is_first_install,
+        "download_url": download_url,
     }
 
 
 def get_update_page_url():
     return DOWNLOADLAST_URL
+
+def _extract_file_url(files) -> str:
+    current_os = platform.system().lower()
+
+    pairs = []
+    if isinstance(files, dict):
+        pairs = list(files.items())
+    elif isinstance(files, list):
+        for item in files:
+            if isinstance(item, dict):
+                name = item.get("os") or item.get("platform") or item.get("name") or ""
+                pairs.append((name, item))
+
+    for name, value in pairs:
+        if str(name).strip().lower() != current_os:
+            continue
+        if isinstance(value, str):
+            return value.strip()
+        if isinstance(value, dict):
+            for key in ("url", "link", "download", "href", "file"):
+                if isinstance(value.get(key), str):
+                    return value[key].strip()
+    return ""
+
+
+def get_download_url(catalog: dict, numeric_version: str) -> str:
+    versions = catalog.get("version", {})
+    if not isinstance(versions, dict):
+        return ""
+    for key, info in versions.items():
+        if strip_version_decorators(key) == numeric_version and isinstance(info, dict):
+            url = _extract_file_url(info.get("files"))
+            if url:
+                return urljoin(API_URL, url)
+    return ""
