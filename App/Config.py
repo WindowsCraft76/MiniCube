@@ -60,6 +60,7 @@ PRIVACY_URL = "https://windowscraft76.fr/minicube/r/privacy/"
 ISSUES_URL = "https://windowscraft76.fr/minicube/r/issues/"
 DOWNLOADLAST_URL = "https://windowscraft76.fr/minicube/r/downloadlast/"
 HELP_INSTALLED_VERSION_URL = "https://windowscraft76.fr/minicube/help/installed-version/"
+FEEDBACK_URL = "https://windowscraft76.fr/minicube/r/feedback/"
 
 copyright = "Copyright (c) 2026 WindowsCraft76"
 

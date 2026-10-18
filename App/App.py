@@ -50,7 +50,8 @@ from Config import (
     copyright,
     TERMINAL_COLORS,
     TERMINAL_RESET,
-    TEMP_DIR
+    TEMP_DIR,
+    FEEDBACK_URL
 )
 from DiscordRPC import DiscordRPC
 from MicrosoftAuth import MicrosoftAuth
@@ -126,6 +127,7 @@ class App:
         menu.add_command(label="Settings", command=self.toggle_settings_window)
         menu.add_command(label="Open folder", command=self.open_folder)
         menu.add_separator()
+        menu.add_command(label="Check for updates", command=self.check_version_mismatch)
         menu.add_command(label="Exit", command=self._on_close_request)
         self.toolbar.add_cascade(label="Menu", menu=menu)
 
@@ -152,6 +154,7 @@ class App:
         help.add_command(label="Disclaimer", command=lambda: webbrowser.open(f"{DISCLAIMER_URL}"))
         help.add_separator()
         help.add_command(label="Report Issue", command=lambda: webbrowser.open(f"{ISSUES_URL}"))
+        help.add_command(label="Feedback", command=lambda: webbrowser.open(f"{FEEDBACK_URL}"))
         self.toolbar.add_cascade(label="Help", menu=help)
 
         self.UPDATE_LABEL = "Install the new version now!"
@@ -286,6 +289,15 @@ class App:
     def _on_launch_button(self):
         if self._minecraft_running():
             self.stop_game()
+            return
+        if self.version_var.get() == "Loading...":
+            messagebox.showwarning("Launch", "Version list is still loading.\nPlease wait a moment and try again.")
+            return
+        if self.version_var.get() == "No version available":
+            messagebox.showwarning("Launch", "No version available to launch.\nPlease check your settings and try again.")
+            return
+        if self.version_var.get() == "Error":
+            messagebox.showwarning("Launch", "An error occurred while checking version availability.\nPlease check your settings and try again.")
             return
         self.save_settings()
         self.update_progress("Starting...")
@@ -1583,6 +1595,9 @@ class App:
                 self.version_manifest = json.load(f)
             self.log(f"Version manifest fetched successfully! ({len(self.version_manifest.get('versions', []))} versions available)", "success")
             return True
+        except _AbortLaunch:
+            self.log("Manifest fetch canceled.", "info")
+            return False
         except Exception as e:
             self.root.after(0, lambda: messagebox.showerror("Error", "Unable to fetch manifest! See logs for details."))
             self.log(f"Error fetching version manifest! {e}", "error")
@@ -1764,7 +1779,7 @@ class App:
                 speed = done / elapsed if elapsed > 0 else 0
                 remaining = (total - done) / speed if speed > 0 else 0
                 remaining_str = self.format_duration(remaining)
-                self.update_progress(f"Downloading {label}s: {done}/{total} ({remaining_str} left)")
+                self.update_progress(f"Downloading {label}s: {done}/{total} - {remaining_str} left")
 
         with ThreadPoolExecutor(max_workers=8) as executor:
             futures = [executor.submit(download_one, item) for item in items]
@@ -1824,14 +1839,20 @@ class App:
         return response.json()
 
     def _urlretrieve(self, url, dest_path):
-        with self._http.get(url, stream=True, timeout=30) as response:
-            response.raise_for_status()
-            with open(dest_path, "wb") as out_file:
-                for chunk in response.iter_content(chunk_size=131072):
-                    if self._cancel_event.is_set():
-                        raise _AbortLaunch()
-                    if chunk:
-                        out_file.write(chunk)
+        dest_path = Path(dest_path)
+        temp_path = dest_path.with_name(f"{dest_path.name}.part")
+        try:
+            with self._http.get(url, stream=True, timeout=30) as response:
+                response.raise_for_status()
+                with open(temp_path, "wb") as out_file:
+                    for chunk in response.iter_content(chunk_size=131072):
+                        if self._cancel_event.is_set():
+                            raise _AbortLaunch()
+                        if chunk:
+                            out_file.write(chunk)
+            temp_path.replace(dest_path)
+        finally:
+            temp_path.unlink(missing_ok=True)
 
     def _download_file(self, url, path):
         if self._cancel_event.is_set():
@@ -2514,6 +2535,7 @@ class App:
             self.log(f"Error repairing version {version_id}: {e}", "error")
             self.root.after(0, lambda: messagebox.showerror("Repair version", "Unable to repair the version! See logs for details."))
         finally:
+            self._cancel_event.clear()
             self.root.after(0, lambda: self.launch_btn.config(text="Play"))
             self.root.after(0, lambda: self.set_ui_state(True))
 
@@ -2644,6 +2666,7 @@ class App:
             self.log(f"Unable to launch the game: {e}", "error")
             self.root.after(0, lambda: messagebox.showerror("Error", "Unable to launch the game! See logs for details."))
 
+        self._cancel_event.clear()
         self.root.after(0, lambda: self.launch_btn.config(text="Play"))
         self.root.after(0, lambda: self.set_ui_state(True))
         self.log("=== Game finished ===", "info")
