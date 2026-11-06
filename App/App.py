@@ -8,6 +8,7 @@ from AccountManager import AccountManager
 from Config import (
     ASSETS,
     DISCLAIMER_URL,
+    GAME_DIR,
     HELP_INSTALLED_VERSION_URL,
     ISSUES_URL,
     PAGE_URL,
@@ -60,6 +61,7 @@ class App(
     def __init__(self, root, rpc=None, debug=None, instance_socket=None):
         self.root = root
         self.debug = debug
+        self._ui_locked = False
 
         self.log_window = None
         self.log_text_win = None
@@ -71,6 +73,7 @@ class App(
         self._game_started_at = None
         self._game_status_after_id = None
         self._hidden_in_background = False
+        self._launcher_exiting = False
         self._instance_socket = instance_socket
         if self._instance_socket:
             threading.Thread(target=self._listen_for_instance_signal, daemon=True).start()
@@ -167,10 +170,12 @@ class App(
         self.show_old_var = tk.BooleanVar(value=False)
         self.discord_rpc_var = tk.BooleanVar(value=True)
         self.keep_open_var = tk.BooleanVar(value=True)
+        self.close_on_launch_var = tk.BooleanVar(value=False)
+        self.game_dir_var = tk.StringVar(value=str(GAME_DIR))
+        self.download_limit_kbps = 0
 
         self.download_thread = None
         self._cancel_event = threading.Event()
-        self._ui_locked = False
 
         self._http = requests.Session()
         self._http.headers.update({"User-Agent": USER_AGENT})

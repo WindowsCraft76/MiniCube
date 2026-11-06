@@ -25,7 +25,7 @@ class LifecycleMixin:
     def _restore_window(self):
         try:
             self._hidden_in_background = False
-            self.root.deiconify()
+            self._restore_all_windows()
             self.root.lift()
             self.root.focus_force()
             self.root.attributes("-topmost", True)

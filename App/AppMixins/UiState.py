@@ -2,22 +2,51 @@ import contextlib
 import os
 import time
 import tkinter as tk
-from Config import (
-    GAME_DIR
-)
 
 
 class UiStateMixin:
 
     def open_folder(self):
-        folder_path = GAME_DIR
+        folder_path = self.game_dir
+        with contextlib.suppress(OSError):
+            folder_path.mkdir(parents=True, exist_ok=True)
         if os.name == "nt":
             os.startfile(folder_path)
+
+    # attribute, active state, blocked by _ui_locked, requires internet
+    _WIDGET_RULES = (
+        ("offline_entry",   "normal", True,  False),
+        ("offline_check",   "normal", True,  False),
+        ("old_check",       "normal", True,  False),
+        ("keep_open_check", "normal", False,  False),
+        ("repair_btn",      "normal", True,  True),
+        ("add_account_btn", "normal", False, True),
+        ("game_dir_browse_btn", "normal", True, False),
+        ("game_dir_reset_btn",  "normal", True, False),
+    )
+
+    def _apply_widget_states(self):
+        for attr, active, locks, needs_online in self._WIDGET_RULES:
+            widget = getattr(self, attr, None)
+            if widget is None:
+                continue
+            blocked = (locks and self._ui_locked) or (needs_online and self.no_internet)
+            with contextlib.suppress(Exception):
+                if widget.winfo_exists():
+                    widget.config(state="disabled" if blocked else active)
+
+        with contextlib.suppress(Exception):
+            if self._ui_locked or not self.account_manager.get_all_accounts():
+                self.account_menu.config(state="disabled")
+            else:
+                self.account_menu.config(state="readonly")
+
+        self._sync_version_menu_state()
+        self._sync_snapshot_check_state()
 
     def set_ui_state(self, enabled: bool):
         self._ui_locked = not enabled
         normal_state = "normal" if enabled else "disabled"
-        combo_state = "readonly" if enabled else "disabled"
 
         profile_menu_index = self._find_toolbar_index_by_label("Profile")
         if profile_menu_index is not None:
@@ -28,29 +57,12 @@ class UiStateMixin:
 
         self.root.config(menu=self.toolbar)
         self._right_align_notifications()
-
-        self.account_menu.config(state=combo_state)
         self.root.after(250, self._right_align_notifications)
-        self._sync_version_menu_state()
 
-        self.offline_entry.config(state=normal_state)
-        self.offline_check.config(state=normal_state)
-        self._sync_snapshot_check_state()
+        self._apply_widget_states()
+
         if enabled:
             self.launch_btn.config(state="normal", text="Play")
-
-        if hasattr(self, "ram_spin") and self.ram_spin.winfo_exists():
-            self.ram_spin.config(state=normal_state)
-
-        if hasattr(self, "old_check") and self.old_check and self.old_check.winfo_exists():
-            self.old_check.config(state=normal_state)
-
-        if hasattr(self, "keep_open_check") and self.keep_open_check.winfo_exists():
-            self.keep_open_check.config(state=normal_state)
-
-        self._sync_online_widgets()
-
-        if enabled:
             self.refresh_version_list()
 
     def update_progress(self, text=""):

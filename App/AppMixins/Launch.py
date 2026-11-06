@@ -6,7 +6,6 @@ import time
 from tkinter import messagebox
 from Config import (
     ASSETS_DIR,
-    GAME_DIR,
     LIBRARIES_DIR,
     VERSIONS_DIR
 )
@@ -97,6 +96,12 @@ class LaunchMixin:
         return result
 
     def _build_jvm_and_game_args(self, version_data, version_id, natives_dir, cp_str, active_user, uuid, token, launcher_version):
+        game_dir = self.game_dir
+        try:
+            game_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            self.log(f"Unable to create the game directory {game_dir}: {e}", "warn")
+
         substitutions = {
             "natives_directory": str(natives_dir),
             "launcher_name": "MiniCube",
@@ -105,7 +110,7 @@ class LaunchMixin:
             "classpath_separator": os.pathsep,
             "library_directory": str(LIBRARIES_DIR),
             "version_name": version_id,
-            "game_directory": str(GAME_DIR),
+            "game_directory": str(game_dir),
             "assets_root": str(ASSETS_DIR),
             "game_assets": str(ASSETS_DIR),
             "assets_index_name": version_data.get("assetIndex", {}).get("id", ""),
@@ -136,7 +141,7 @@ class LaunchMixin:
             game_args = [
                 "--username", active_user,
                 "--version", version_id,
-                "--gameDir", str(GAME_DIR),
+                "--gameDir", str(game_dir),
                 "--assetsDir", str(ASSETS_DIR),
                 "--assetIndex", substitutions["assets_index_name"],
                 "--uuid", uuid,
@@ -187,6 +192,9 @@ class LaunchMixin:
         except Exception as e:
             self.log(f"Unable to launch the game: {e}", "error")
             self.root.after(0, lambda: messagebox.showerror("Error", "Unable to launch the game! See logs for details."))
+
+        if self._launcher_exiting:
+            return
 
         self._cancel_event.clear()
         self.root.after(0, lambda: self.launch_btn.config(text="Play"))
@@ -299,15 +307,36 @@ class LaunchMixin:
             self.update_progress("Loading...")
             self._update_rpc_playing(version_id, active_user, uuid)
             launch_time = time.strftime("%Y-%m-%d %H:%M:%S")
-            game_process = subprocess.Popen(
-                args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, encoding="utf-8", errors="replace"
-            )
+            close_on_launch = self.close_on_launch_var.get()
+            fully_exit = close_on_launch and not self.keep_open_var.get()
+
+            if fully_exit:
+                game_process = subprocess.Popen(
+                    args,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    creationflags=0x00000008 | 0x00000200,
+                )
+            else:
+                game_process = subprocess.Popen(
+                    args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    text=True, encoding="utf-8", errors="replace"
+                )
             self._game_stop_requested = False
             self.game_process = game_process
             self._playing_username = active_user
             self._game_started_at = time.monotonic()
             self.log(f"Game started (PID {game_process.pid}) as {active_user}.", "success")
+            if fully_exit:
+                self.log("Game started, closing the launcher.", "info")
+                self._launcher_exiting = True
+                self.root.after(0, self._shutdown_app)
+                return None
+
+            if close_on_launch:
+                self._hidden_in_background = True
+                self.root.after(0, self._hide_all_windows)
             self._set_launch_button("Stop", "normal")
             self._update_game_status()
         except Exception as e:

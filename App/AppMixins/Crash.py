@@ -7,10 +7,7 @@ import time
 import tkinter as tk
 from collections import deque
 from tkinter import messagebox
-from Config import (
-    ASSETS,
-    GAME_DIR
-)
+from Config import ASSETS
 from AppMixins.Exceptions import _AbortLaunch
 
 
@@ -128,7 +125,7 @@ class CrashMixin:
         return result["choice"]
 
     def _find_latest_crash_report(self, since_str):
-        crash_dir = GAME_DIR / "crash-reports"
+        crash_dir = self.game_dir / "crash-reports"
         if not crash_dir.exists():
             return None
         try:
@@ -163,6 +160,9 @@ class CrashMixin:
 
     def _handle_crash(self, version_id, ram, reason, launch_time, log_tail, exit_code, java_info, command):
         crash_report_path = self._find_latest_crash_report(launch_time)
+
+        if self._hidden_in_background:
+            self.root.after(0, self._restore_window)
 
         debug_text = None
         if crash_report_path:

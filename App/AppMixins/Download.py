@@ -12,7 +12,33 @@ from Config import (
 from AppMixins.Exceptions import _AbortLaunch
 
 
+class _RateLimiter:
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._next = 0.0
+
+    def reserve(self, nbytes, limit_bps):
+        if limit_bps <= 0:
+            return 0.0
+        with self._lock:
+            now = time.monotonic()
+            start = max(now, self._next)
+            self._next = start + nbytes / limit_bps
+        return start - now
+
+
+_rate_limiter = _RateLimiter()
+
+
 class DownloadMixin:
+
+    def _download_limit_bps(self):
+        return max(0, int(getattr(self, "download_limit_kbps", 0) or 0)) * 1024
+
+    def _throttle(self, nbytes):
+        delay = _rate_limiter.reserve(nbytes, self._download_limit_bps())
+        if delay > 0 and self._cancel_event.wait(delay):
+            raise _AbortLaunch()
 
     def prepare_version(self, version_id, force=False):
         self.log(f"Preparing to repair Minecraft {version_id}..." if force else f"Preparing Minecraft {version_id}...", "info")
@@ -152,14 +178,17 @@ class DownloadMixin:
     def _urlretrieve(self, url, dest_path):
         dest_path = Path(dest_path)
         temp_path = dest_path.with_name(f"{dest_path.name}.part")
+        limit_bps = self._download_limit_bps()
+        chunk_size = max(4096, min(131072, limit_bps // 8)) if limit_bps else 131072
         try:
             with self._http.get(url, stream=True, timeout=30) as response:
                 response.raise_for_status()
                 with open(temp_path, "wb") as out_file:
-                    for chunk in response.iter_content(chunk_size=131072):
+                    for chunk in response.iter_content(chunk_size=chunk_size):
                         if self._cancel_event.is_set():
                             raise _AbortLaunch()
                         if chunk:
+                            self._throttle(len(chunk))
                             out_file.write(chunk)
             temp_path.replace(dest_path)
         finally:

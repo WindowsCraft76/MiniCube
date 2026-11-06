@@ -1,4 +1,3 @@
-import contextlib
 import threading
 from tkinter import messagebox
 from Config import (
@@ -13,17 +12,7 @@ class ConnectivityMixin:
         return "normal" if enabled and not self.no_internet else "disabled"
 
     def _sync_online_widgets(self):
-        widgets_enabled = {
-            "repair_btn": not self._ui_locked,
-            "add_account_btn": True,
-        }
-        for name, enabled in widgets_enabled.items():
-            widget = getattr(self, name, None)
-            if widget is None:
-                continue
-            with contextlib.suppress(Exception):
-                if widget.winfo_exists():
-                    widget.config(state=self._online_only_state(enabled))
+        self._apply_widget_states()
 
     def _show_no_internet_info(self):
         message = (
