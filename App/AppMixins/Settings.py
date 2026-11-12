@@ -175,7 +175,7 @@ class SettingsMixin:
         win.title(t("settings.window.title"))
         win.resizable(False, False)
         win.iconbitmap(str(ASSETS / "icon" / "icon_64x64.ico"))
-        center_window(win, 460, 320)
+        center_window(win, 500, 320)
 
         self._temp_ram_var = tk.IntVar(value=self.ram_var.get())
         self._temp_show_old_var = tk.BooleanVar(value=self.show_old_var.get())

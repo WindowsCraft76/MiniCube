@@ -32,7 +32,7 @@ class ToolbarMixin:
     def _render_notifications(self):
         with contextlib.suppress(Exception):
             end = self.toolbar.index("end")
-            for i in range(end, self._notif_anchor_index, -1):
+            for i in range(end, self._notif_anchor_index - 1, -1):
                 self.toolbar.delete(i)
             for label, command in self._notifications.values():
                 self.toolbar.add_command(label=label, command=command)

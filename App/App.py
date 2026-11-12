@@ -149,10 +149,7 @@ class App(
         help.add_command(label=t("toolbar.help.report_issue"), command=lambda: webbrowser.open(f"{ISSUES_URL}"))
         help.add_command(label=t("toolbar.help.feedback"), command=lambda: webbrowser.open(f"{FEEDBACK_URL}"))
         self.toolbar.add_cascade(label=t("toolbar.help"), menu=help)
-
-
-        self.toolbar.add_command(label=" ", state="disabled")
-        self._notif_anchor_index = self.toolbar.index("end")
+        self._notif_anchor_index = self.toolbar.index("end") + 1
 
         self.root.config(menu=self.toolbar)
         self.root.after(500, self._right_align_notifications)

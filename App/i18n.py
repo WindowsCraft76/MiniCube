@@ -1,8 +1,8 @@
 import json
-from Config import LANG_DIR
+from Config import LANG_DIR, DEFAULT_LANGUAGE
 
 class I18n:
-    def __init__(self, default="en_us"):
+    def __init__(self, default=DEFAULT_LANGUAGE):
         self.lang_dir = LANG_DIR
         self.default_language = default
         self.strings = {}

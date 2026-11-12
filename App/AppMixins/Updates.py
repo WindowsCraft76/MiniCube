@@ -63,7 +63,11 @@ class UpdatesMixin:
             self.update_btn.pack_forget()
 
     def _add_update_toolbar_entry(self, remote_version, remote_type):
-        self._set_notification("update", t("toolbar.notification.update"), lambda: self._start_auto_update(remote_version))
+        self._set_notification(
+            "update",
+            t("toolbar.notification.update"),
+            lambda: self._show_update_popup(remote_version, remote_type),
+        )
 
         if self._ui_ready:
             self._show_update_popup(remote_version, remote_type)
