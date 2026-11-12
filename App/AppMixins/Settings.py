@@ -3,7 +3,7 @@ import json
 import shutil
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk
 from Config import (
     ASSETS,
     CACHE_DIR,
@@ -11,6 +11,8 @@ from Config import (
     SETTINGS_FILE
 )
 from SplashScreen import center_window
+from i18n import i18n, t
+from ScrollingButton import ScrollingButton
 
 _MAX_DOWNLOAD_LIMIT_KBPS = 1_000_000
 
@@ -25,6 +27,31 @@ class SettingsMixin:
             return fallback
         return max(0, min(_MAX_DOWNLOAD_LIMIT_KBPS, number))
 
+    def _load_language_setting(self):
+        self._language_setting = i18n.current
+        if not SETTINGS_FILE.exists():
+            return
+
+        try:
+            with open(SETTINGS_FILE, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            self.log(f"Error loading language setting: {e}", "error")
+            return
+
+        if not isinstance(data, dict):
+            self.log("Error loading language setting: settings must contain a JSON object.", "error")
+            return
+
+        language = data.get("language", "en_us")
+        if language in i18n.available():
+            self._language_setting = language
+            i18n.set_language(language)
+        else:
+            i18n.set_language(i18n.default_language)
+            self._language_setting = i18n.current
+            self.log(f"Unknown language setting {language!r}, using {i18n.current}.", "warn")
+
     def _cache_size(self):
         total = 0
         for path in CACHE_DIR.rglob("*"):
@@ -36,11 +63,10 @@ class SettingsMixin:
     def _confirm_clear_cache(self):
         parent = getattr(self, "settings_window", None) or self.root
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        size_mb = self._cache_size() / 1048576
 
         if not messagebox.askyesno(
-            "Clear cache",
-            f"Delete all files in the cache folder ({size_mb:.2f} MB)?",
+            t("settings.yesno_box.clear_cache.title"),
+            t('settings.yesno_box.clear_cache.detail'),
             parent=parent,
         ):
             return
@@ -62,12 +88,16 @@ class SettingsMixin:
 
         if failed:
             messagebox.showwarning(
-                "Clear cache",
-                f"{failed} item(s) could not be deleted. See logs for details.",
+                t("settings.warning_box.clear_cache_failed.title"),
+                t("settings.warning_box.clear_cache_failed.detail").format(a=failed),
                 parent=parent,
             )
         else:
-            messagebox.showinfo("Clear cache", "Cache cleared.", parent=parent)
+            messagebox.showinfo(
+                t("settings.info_box.cache_cleared.title"),
+                t("settings.info_box.cache_cleared.detail"),
+                parent=parent
+            )
 
     @property
     def game_dir(self) -> Path:
@@ -76,7 +106,7 @@ class SettingsMixin:
     def _browse_game_dir(self):
         chosen = filedialog.askdirectory(
             parent=self.settings_window,
-            title="Select the Minecraft game directory",
+            title=t("settings.directory_box.game_directory.title"),
             initialdir=self._temp_game_dir_var.get(),
             mustexist=False,
         )
@@ -97,8 +127,8 @@ class SettingsMixin:
 
         if self._minecraft_running() or self._ui_locked:
             messagebox.showwarning(
-                "Game directory",
-                "The game directory can't be changed while Minecraft is running or an operation is in progress.",
+                t("settings.warning_box.game_open_change_directory.title"),
+                t("settings.warning_box.game_open_change_directory.detail"),
                 parent=parent,
             )
             self._temp_game_dir_var.set(current)
@@ -113,8 +143,8 @@ class SettingsMixin:
         except OSError as e:
             self.log(f"Invalid game directory {path}: {e}", "error")
             messagebox.showerror(
-                "Game directory",
-                f"This folder can't be used:\n{e}",
+                t("settings.error_box.game_directory_invalid.title"),
+                t("settings.error_box.game_directory_invalid.detail").format(a=e),
                 parent=parent,
             )
             self._temp_game_dir_var.set(current)
@@ -123,8 +153,8 @@ class SettingsMixin:
         self.game_dir_var.set(str(path))
         self.log(f"Game directory changed to {path}", "success")
         messagebox.showinfo(
-            "Game directory",
-            "Game directory updated.\nYour existing worlds and settings are not moved automatically.",
+            t("settings.info_box.game_directory_changed.title"),
+            t("settings.info_box.game_directory_changed.detail"),
             parent=parent,
         )
 
@@ -142,7 +172,7 @@ class SettingsMixin:
         self._sync_settings_from_file()
 
         win = self.settings_window = tk.Toplevel(self.root)
-        win.title("Settings")
+        win.title(t("settings.window.title"))
         win.resizable(False, False)
         win.iconbitmap(str(ASSETS / "icon" / "icon_64x64.ico"))
         center_window(win, 460, 320)
@@ -154,6 +184,7 @@ class SettingsMixin:
         self._temp_close_on_launch_var = tk.BooleanVar(value=self.close_on_launch_var.get())
         self._temp_game_dir_var = tk.StringVar(value=self.game_dir_var.get())
         self._temp_download_limit_var = tk.StringVar(value=str(self.download_limit_kbps))
+        self._temp_language_var = tk.StringVar(value=i18n.current)
 
         btn_frame = tk.Frame(win)
         btn_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=10, pady=10)
@@ -164,20 +195,21 @@ class SettingsMixin:
             self._apply_settings_from_temp()
             self.save_settings()
 
-        self.save_btn = tk.Button(btn_frame, text="Save", command=_on_save)
+        self.save_btn = ScrollingButton(btn_frame, text=t("settings.button.save"), command=_on_save, width=7)
         self.save_btn.pack(side=tk.RIGHT, padx=5)
 
-        self.reset_btn = tk.Button(btn_frame, text="Reset settings", command=self.reset_settings)
+        self.reset_btn = ScrollingButton(btn_frame, text=t("settings.button.reset"), command=self.reset_settings, width=12)
         self.reset_btn.pack(side=tk.RIGHT, padx=5)
 
-        self.repair_btn = tk.Button(
+        self.repair_btn = ScrollingButton(
                     btn_frame,
-                    text="Repair version",
-                    command=self._confirm_repair_selected_version
+                    text=t("settings.button.repair"),
+                    command=self._confirm_repair_selected_version,
+                    width=13
                 )
         self.repair_btn.pack(side=tk.RIGHT, padx=5)
 
-        self.clear_cache_btn = tk.Button(btn_frame, text="Clear cache", command=self._confirm_clear_cache)
+        self.clear_cache_btn = ScrollingButton(btn_frame, text=t("settings.button.clear_cache"), command=self._confirm_clear_cache, width=11)
         self.clear_cache_btn.pack(side=tk.RIGHT, padx=5)
 
         tabs_bar = tk.Frame(win)
@@ -192,12 +224,12 @@ class SettingsMixin:
         tab_privacy = tk.Frame(content, padx=15, pady=15)
 
         tabs = {
-            "App": tab_app,
-            "Language": tab_language,
-            "Java & Memory": tab_java_memory,
-            "Privacy": tab_privacy
+            t("settings.tab.app"): tab_app,
+            t("settings.tab.language"): tab_language,
+            t("settings.tab.java_memory"): tab_java_memory,
+            t("settings.tab.privacy"): tab_privacy
         }
-        current_tab = tk.StringVar(value="App")
+        current_tab = tk.StringVar(value=t("settings.tab.app"))
 
         def show_tab():
             for frame in tabs.values():
@@ -220,26 +252,26 @@ class SettingsMixin:
 
         self.old_check = tk.Checkbutton(
             tab_app,
-            text="Show historical versions of Minecraft",
+            text=t("settings.check.show_old_versions"),
             variable=self._temp_show_old_var
         )
         self.old_check.pack(anchor="w", pady=5)
 
         self.close_on_launch_check = tk.Checkbutton(
             tab_app,
-            text="Close the launcher when the game starts",
+            text=t("settings.check.close_on_launch"),
             variable=self._temp_close_on_launch_var
         )
         self.close_on_launch_check.pack(anchor="w", pady=5)
 
         self.keep_open_check = tk.Checkbutton(
             tab_app,
-            text="Keep running in background while Minecraft is open",
+            text=t("settings.check.keep_background"),
             variable=self._temp_keep_open_var
         )
         self.keep_open_check.pack(anchor="w", pady=5)
 
-        tk.Label(tab_app, text="Game directory:").pack(anchor="w", pady=(5, 0))
+        tk.Label(tab_app, text=t("settings.label.game_directory")).pack(anchor="w", pady=(5, 0))
 
         game_dir_row = tk.Frame(tab_app)
         game_dir_row.pack(fill=tk.X, pady=(3, 0))
@@ -247,16 +279,16 @@ class SettingsMixin:
         self.game_dir_entry = tk.Entry(game_dir_row, textvariable=self._temp_game_dir_var, state="readonly")
         self.game_dir_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        self.game_dir_reset_btn = tk.Button(game_dir_row, text="Default", command=self._reset_game_dir)
+        self.game_dir_reset_btn = ScrollingButton(game_dir_row, text=t("settings.button.default"), command=self._reset_game_dir, width=7)
         self.game_dir_reset_btn.pack(side=tk.RIGHT, padx=(4, 0))
 
-        self.game_dir_browse_btn = tk.Button(game_dir_row, text="Browse...", command=self._browse_game_dir)
+        self.game_dir_browse_btn = ScrollingButton(game_dir_row, text=t("settings.button.browse"), command=self._browse_game_dir, width=8)
         self.game_dir_browse_btn.pack(side=tk.RIGHT, padx=(4, 0))
 
         limit_row = tk.Frame(tab_app)
         limit_row.pack(fill=tk.X, pady=(10, 0))
 
-        tk.Label(limit_row, text="Download speed limit (0 = unlimited):").pack(side=tk.LEFT)
+        tk.Label(limit_row, text=t("settings.label.download_limit")).pack(side=tk.LEFT)
 
         self.download_limit_spin = tk.Spinbox(
             limit_row,
@@ -270,16 +302,47 @@ class SettingsMixin:
         self.download_limit_spin.pack(side=tk.LEFT, padx=(6, 0))
         tk.Label(limit_row, text="KB/s").pack(side=tk.LEFT, padx=(3, 0))
 
-        tk.Label(tab_language, text="Coming soon!", fg="red").pack(anchor="center", pady=5)
+        tk.Label(tab_language, text=t("settings.label.available_languages")).pack(anchor="w", pady=(0, 5))
+
+        language_list_frame = tk.Frame(tab_language)
+        language_list_frame.pack(fill=tk.BOTH, expand=True)
+
+        language_scrollbar = ttk.Scrollbar(language_list_frame, orient=tk.VERTICAL)
+        self.language_listbox = tk.Listbox(
+            language_list_frame,
+            height=8,
+            exportselection=False,
+            yscrollcommand=language_scrollbar.set,
+        )
+        language_scrollbar.configure(command=self.language_listbox.yview)
+        self.language_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        language_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        tk.Label(tab_language, text=t("settings.label.language_restart")).pack(anchor="w", pady=(5, 0))
+
+        self._language_codes = i18n.available()
+        for language_code in self._language_codes:
+            self.language_listbox.insert(tk.END, i18n.display_name(language_code))
+        if self._temp_language_var.get() in self._language_codes:
+            selected_index = self._language_codes.index(self._temp_language_var.get())
+            self.language_listbox.selection_set(selected_index)
+            self.language_listbox.activate(selected_index)
+
+        def _on_language_selected(_event=None):
+            selection = self.language_listbox.curselection()
+            if selection:
+                self._temp_language_var.set(self._language_codes[selection[0]])
+
+        self.language_listbox.bind("<<ListboxSelect>>", _on_language_selected)
 
         self.discord_rpc_check = tk.Checkbutton(
             tab_privacy,
-            text="Enable Discord Rich Presence",
+            text=t("settings.check.discord_rpc"),
             variable=self._temp_discord_rpc_var
         )
         self.discord_rpc_check.pack(anchor="w", pady=5)
 
-        tk.Label(tab_java_memory, text="RAM memory to allocate:").pack(anchor="w")
+        tk.Label(tab_java_memory, text=t("settings.label.ram_allocate")).pack(anchor="w")
 
         ram_row = tk.Frame(tab_java_memory)
         ram_row.pack(fill=tk.X, pady=3)
@@ -354,7 +417,7 @@ class SettingsMixin:
         tk.Frame(tab_java_memory, height=2, bd=1, relief=tk.SUNKEN).pack(
             fill=tk.X, pady=(5, 10)
         )
-        tk.Label(tab_java_memory, text="Java setting coming soon!", fg="red").pack(
+        tk.Label(tab_java_memory, text=t("settings.label.java_soon"), fg="red").pack(
             anchor="center", pady=5
         )
 
@@ -376,6 +439,7 @@ class SettingsMixin:
             self.game_dir_browse_btn = None
             self.download_limit_spin = None
             self.clear_cache_btn = None
+            self.language_listbox = None
 
         win.protocol("WM_DELETE_WINDOW", _on_close)
 
@@ -392,10 +456,18 @@ class SettingsMixin:
             self._temp_close_on_launch_var.set(self.close_on_launch_var.get())
             self._temp_game_dir_var.set(self.game_dir_var.get())
             self._temp_download_limit_var.set(str(self.download_limit_kbps))
+            self._temp_language_var.set(self._language_setting)
+            if self._temp_language_var.get() in self._language_codes:
+                selected_index = self._language_codes.index(self._temp_language_var.get())
+                self.language_listbox.selection_clear(0, tk.END)
+                self.language_listbox.selection_set(selected_index)
+                self.language_listbox.activate(selected_index)
 
     def load_settings(self):
 
         self.log("Loading settings...", "info")
+        if not hasattr(self, "_language_setting"):
+            self._language_setting = i18n.current
 
         if not SETTINGS_FILE.exists():
             return
@@ -415,6 +487,9 @@ class SettingsMixin:
             self.close_on_launch_var.set(data.get("close_on_launch", False))
             self.game_dir_var.set(data.get("game_dir") or str(GAME_DIR))
             self.download_limit_kbps = self._parse_download_limit(data.get("download_limit_kbps", 0))
+            language = data.get("language", "en_us")
+            if language in i18n.available():
+                self._language_setting = language
 
             self.log("Settings loaded!", "success")
         except Exception as e:
@@ -451,6 +526,7 @@ class SettingsMixin:
             "close_on_launch": self.close_on_launch_var.get(),
             "game_dir": self.game_dir_var.get(),
             "download_limit_kbps": self.download_limit_kbps,
+            "language": self._language_setting,
         })
 
         self._write_settings_file(data)
@@ -475,6 +551,7 @@ class SettingsMixin:
         self.close_on_launch_var.set(False)
         self.game_dir_var.set(str(GAME_DIR))
         self.download_limit_kbps = 0
+        self._language_setting = "en_us"
 
         if SETTINGS_FILE.exists():
             SETTINGS_FILE.unlink()
@@ -501,6 +578,7 @@ class SettingsMixin:
             new_keep_open = data.get("keep_open_if_minecraft_running", True)
             new_close_on_launch = data.get("close_on_launch", False)
             new_game_dir = data.get("game_dir") or str(GAME_DIR)
+            new_language = data.get("language", i18n.current)
 
             if self.show_snapshots_var.get() != new_show_snapshots:
                 self.show_snapshots_var.set(new_show_snapshots)
@@ -522,6 +600,20 @@ class SettingsMixin:
 
             if self.game_dir_var.get() != new_game_dir:
                 self.game_dir_var.set(new_game_dir)
+
+            if new_language in i18n.available():
+                self._language_setting = new_language
+            if (
+                getattr(self, "_temp_language_var", None)
+                and getattr(self, "language_listbox", None)
+                and getattr(self, "_language_codes", None) is not None
+            ):
+                self._temp_language_var.set(self._language_setting)
+                if self._language_setting in self._language_codes:
+                    selected_index = self._language_codes.index(self._language_setting)
+                    self.language_listbox.selection_clear(0, tk.END)
+                    self.language_listbox.selection_set(selected_index)
+                    self.language_listbox.activate(selected_index)
 
             self.download_limit_kbps = self._parse_download_limit(
                 data.get("download_limit_kbps", 0), fallback=self.download_limit_kbps
@@ -552,6 +644,10 @@ class SettingsMixin:
             self._temp_download_limit_var.get(), fallback=self.download_limit_kbps
         )
         self._temp_download_limit_var.set(str(self.download_limit_kbps))
+
+        selected_language = self._temp_language_var.get()
+        if selected_language in i18n.available():
+            self._language_setting = selected_language
 
     def _apply_discord_rpc(self):
         running = self.rpc.is_running()

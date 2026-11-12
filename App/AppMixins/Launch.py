@@ -12,6 +12,7 @@ from Config import (
 from VersionManager import read_local_version
 from MicrosoftAuth import MicrosoftAuth
 from AppMixins.Exceptions import _AbortLaunch
+from i18n import t
 
 
 class LaunchMixin:
@@ -20,27 +21,27 @@ class LaunchMixin:
 
     def _confirm_repair_selected_version(self):
         if self.no_internet:
-            messagebox.showwarning("Repair version", "You are offline.\nRepairing a version requires an internet connection.")
+            messagebox.showwarning(t("launcher.warning_box.repair.no_internet.title"), t("launcher.warning_box.repair.no_internet.detail"))
             return
 
         version_id = self._get_selected_version_id()
         if not version_id:
-            messagebox.showwarning("Repair version", "No version selected.")
+            messagebox.showwarning(t("launcher.warning_box.repair.no_select_version.title"), t("launcher.warning_box.repair.no_select_version.detail"))
             return
 
         if self.download_thread and self.download_thread.is_alive():
-            messagebox.showwarning("Repair version", "Another operation is already in progress.")
+            messagebox.showwarning(t("launcher.warning_box.repair.launch_impossible.title"), t("launcher.warning_box.repair.launch_impossible.detail"))
             return
 
         if not messagebox.askyesno(
-            "Repair version",
-            f"This will re-download all files for Minecraft {version_id}.\nDo you want to continue?"
+            t("launcher.yesno_box.repair_version.title"),
+            t("launcher.yesno_box.repair_version.detail").format(a=version_id)
         ):
             return
 
         self._cancel_event.clear()
         self.root.after(0, lambda: self.set_ui_state(False))
-        self.root.after(0, lambda: self.launch_btn.config(state="normal", text="Stop repair"))
+        self.root.after(0, lambda: self.launch_btn.config(state="normal", text=t("launch_button.stop_repair")))
         self.download_thread = threading.Thread(target=self._repair_version_thread, args=(version_id,), daemon=True)
         self.download_thread.start()
 
@@ -48,16 +49,16 @@ class LaunchMixin:
         try:
             self._get_version_ready(version_id, force=True)
             self.log(f"Version {version_id} repaired successfully!", "success")
-            self.update_progress("Repair complete!")
-            self.root.after(0, lambda: messagebox.showinfo("Repair version", f"Version {version_id} has been repaired."))
+            self.update_progress(t("progress_label.repair_completed"))
+            self.root.after(0, lambda: messagebox.showinfo(t("launcher.info_box.repair_completed.title"), t("launcher.info_box.repair_completed.detail").format(a=version_id)))
         except _AbortLaunch:
             self.log("Repair canceled.", "info")
         except Exception as e:
             self.log(f"Error repairing version {version_id}: {e}", "error")
-            self.root.after(0, lambda: messagebox.showerror("Repair version", "Unable to repair the version! See logs for details."))
+            self.root.after(0, lambda: messagebox.showerror(t("launcher.error_box.repair_failed.title"), t("launcher.error_box.repair_failed.detail")))
         finally:
             self._cancel_event.clear()
-            self.root.after(0, lambda: self.launch_btn.config(text="Play"))
+            self.root.after(0, lambda: self.launch_btn.config(text=t("launch_button.play")))
             self.root.after(0, lambda: self.set_ui_state(True))
 
     def launch_game(self):
@@ -66,7 +67,7 @@ class LaunchMixin:
             return
 
         self._cancel_event.clear()
-        self._set_launch_button("Cancel", "normal")
+        self._set_launch_button(t("launcher_button.cancel"), "normal")
         self.log("Starting preparation...", "info")
         self.download_thread = threading.Thread(target=self._launch_game_thread, daemon=True)
         self.download_thread.start()
@@ -169,18 +170,21 @@ class LaunchMixin:
 
             if not account_data:
                 self.root.after(0, lambda: messagebox.showerror(
-                    "Error",
-                    "Please select an account or enable offline mode."
+                    t("launcher.error_box.no_account_select.title"),
+                    t("launcher.error_box.no_account_select.detail")
                 ))
-                self.root.after(0, lambda: self.launch_btn.config(text="Play"))
+                self.root.after(0, lambda: self.launch_btn.config(text=t("launch_button.play")))
                 return
 
         version_id = self._get_selected_version_id()
         ram = self.ram_var.get()
 
         if not version_id:
-            self.root.after(0, lambda: messagebox.showerror("Error", "Please select a valid version/profile."))
-            self.root.after(0, lambda: self.launch_btn.config(text="Play"))
+            self.root.after(0, lambda: messagebox.showerror(
+                t("launcher.error_box.select_valid_version.title"),
+                t("launcher.error_box.select_valid_version.detail")
+            ))
+            self.root.after(0, lambda: self.launch_btn.config(text=t("launch_button.play")))
             return
 
         self.root.after(0, lambda: self.set_ui_state(False))
@@ -191,13 +195,13 @@ class LaunchMixin:
             pass
         except Exception as e:
             self.log(f"Unable to launch the game: {e}", "error")
-            self.root.after(0, lambda: messagebox.showerror("Error", "Unable to launch the game! See logs for details."))
+            self.root.after(0, lambda: messagebox.showerror(t("launcher.error_box.failed_launch.title"), t("launcher.error_box.failed_launch.detail")))
 
         if self._launcher_exiting:
             return
 
         self._cancel_event.clear()
-        self.root.after(0, lambda: self.launch_btn.config(text="Play"))
+        self.root.after(0, lambda: self.launch_btn.config(text=t("launch_button.play")))
         self.root.after(0, lambda: self.set_ui_state(True))
         self.log("=== Game finished ===", "info")
         if self.rpc.is_running():
@@ -229,15 +233,15 @@ class LaunchMixin:
             saved = self.account_manager.get_account_by_name(account_name)
             if not saved or not saved.get("access_token") or not saved.get("uuid"):
                 self._show_error_and_wait(
-                    "Authentication Error",
-                    "No saved session for this account.\nConnect to the internet to sign in."
+                    t("launcher.error_box.token_refresh.no_internet.title"),
+                    t("launcher.error_box.token_refresh.no_internet.detail")
                 )
                 raise _AbortLaunch()
             self.log("Offline: using the last saved token (no refresh).", "warn")
             self._update_account_prefs(last_used_account=saved["uuid"])
             return saved["username"], saved["uuid"], saved["access_token"]
 
-        self.update_progress("Signing in...")
+        self.update_progress("progress_label.signing_in")
         account_name = self.selected_account_var.get()
         account_data = self.account_manager.get_account_by_name(account_name)
         refreshed = MicrosoftAuth(app=self).refresh_token(account_data) if account_data else None
@@ -245,8 +249,8 @@ class LaunchMixin:
         if not refreshed:
             name = account_name or "the selected account"
             self.root.after(0, lambda: messagebox.showerror(
-                "Authentication Error",
-                f"Failed to refresh token for {name}.\nPlease log in again."
+                t("launcher.error_box.token_refresh.failed.title"),
+                t("launcher.error_box.token_refresh.failed.detail").format(a=name)
             ))
             raise _AbortLaunch()
 
@@ -273,7 +277,7 @@ class LaunchMixin:
     def _attempt_launch(self, version_id, ram, force=False):
         is_direct_launch = not force and self.profile_manager.has_profile(version_id)
 
-        self._set_launch_button("Stop repair" if force else "Cancel", "normal")
+        self._set_launch_button(t("launch_button.stop_repair") if force else t("launcher_button.cancel"), "normal")
 
         try:
             version_data, _ = self._get_version_ready(version_id, force=force)
@@ -283,8 +287,8 @@ class LaunchMixin:
             self.log(f"Unable to prepare the version {version_id}: {e}", "error")
             return self._retry_or_abort(
                 version_id, ram,
-                title="An error occurred!",
-                summary=f"An error occurred while preparing version {version_id}.",
+                title=t("crash_win.error_occurred.title"),
+                summary=t("crash_win.error_occurred.summary").format(a=version_id),
                 details=self._build_debug_report(e, app_info={"Minecraft version": version_id})
             )
 
@@ -304,7 +308,7 @@ class LaunchMixin:
         self.log(f"[Command] {command}", "info")
 
         try:
-            self.update_progress("Loading...")
+            self.update_progress(t("progress_label.loading"))
             self._update_rpc_playing(version_id, active_user, uuid)
             launch_time = time.strftime("%Y-%m-%d %H:%M:%S")
             close_on_launch = self.close_on_launch_var.get()
@@ -337,18 +341,18 @@ class LaunchMixin:
             if close_on_launch:
                 self._hidden_in_background = True
                 self.root.after(0, self._hide_all_windows)
-            self._set_launch_button("Stop", "normal")
+            self._set_launch_button(t("launch_button.stop"), "normal")
             self._update_game_status()
         except Exception as e:
             self.log(f"Unable to start Java process: {e}", "error")
             return self._retry_or_abort(
                 version_id, ram,
-                title="Launch error",
-                summary="Unable to start the Java process.",
+                title=t("crash_win.launch_error.title"),
+                summary=t("crash_win.launch_error.summary"),
                 details=self._build_debug_report(e, app_info={"Java version": java_info, "Command": command})
             )
 
-        known_crash_reason, log_tail = self._watch_game_output(game_process)
+        log_tail = self._watch_game_output(game_process)
 
         game_process.wait()
         exit_code = game_process.returncode
@@ -357,13 +361,12 @@ class LaunchMixin:
         self._game_started_at = None
         self.game_process = None
         self._playing_username = None
-        self.update_progress(f"Closed game - You played for {self.format_duration(played_for)}")
+        self.update_progress(t("progress_label.game_close").format(a=self.format_duration(played_for)))
         self.log(f"Java process ended with exit code {exit_code}.", "info")
 
-        crashed = not self._game_stop_requested and (known_crash_reason is not None or exit_code not in (0, None))
+        crashed = not self._game_stop_requested and exit_code not in (0, None)
         if crashed:
-            reason = known_crash_reason or "The game closed unexpectedly."
+            reason = t("crash_win.game_crash.reason.0")
             return self._handle_crash(
                 version_id, ram, reason, launch_time, log_tail, exit_code, java_info, command
             )
-        return None

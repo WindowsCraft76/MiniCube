@@ -10,6 +10,7 @@ from Config import (
     VERSIONS_DIR
 )
 from AppMixins.Exceptions import _AbortLaunch
+from i18n import t
 
 
 class _RateLimiter:
@@ -32,6 +33,10 @@ _rate_limiter = _RateLimiter()
 
 class DownloadMixin:
 
+    def _label(self, kind, count, translate=False):
+        name = kind if count == 1 else (kind[:-1] + "ies" if kind.endswith("y") else kind + "s")
+        return t(f"download.label.{name}") if translate else name
+
     def _download_limit_bps(self):
         return max(0, int(getattr(self, "download_limit_kbps", 0) or 0)) * 1024
 
@@ -42,7 +47,7 @@ class DownloadMixin:
 
     def prepare_version(self, version_id, force=False):
         self.log(f"Preparing to repair Minecraft {version_id}..." if force else f"Preparing Minecraft {version_id}...", "info")
-        self.update_progress("Repairing..." if force else "Preparing...")
+        self.update_progress(t("progress_label.repairing") if force else t("progress_label.preparing"))
         self.log(f"Downloading Minecraft {self.version_var.get()} files...", "info")
 
         version_info = next(v for v in self.version_manifest["versions"] if v["id"] == version_id)
@@ -81,14 +86,16 @@ class DownloadMixin:
 
         return version_data, version_jar_path
 
-    def _download_batch(self, label, items):
+    def _download_batch(self, kind, items):
         if not items:
-            self.log(f"No {label} to download. (already present)", "info")
+            self.log(f"No {self._label(kind, 0)} to download. (already present)", "info")
             return True
 
         total = len(items)
-        self.log(f"Downloading {total} {label}{'s' if total != 1 and not label.endswith('s') else ''}...", "info")
-        self.update_progress(f"Downloading {label}s...")
+        self.log(f"Downloading {total} {self._label(kind, total)}...", "info")
+        self.update_progress(
+            t("progress_label.downloading.0").format(a=self._label(kind, total, translate=True))
+        )
 
         done = 0
         errors = []
@@ -102,7 +109,7 @@ class DownloadMixin:
             path.parent.mkdir(parents=True, exist_ok=True)
             try:
                 self._download_file(url, path)
-                self.log(f"Downloaded {label}: {path.name}", "success")
+                self.log(f"Downloaded {self._label(kind, 1)}: {path.name}", "success")
             except Exception as e:
                 self.log(f"Error downloading {url}: {e}", "error")
                 with progress_lock:
@@ -116,7 +123,14 @@ class DownloadMixin:
                 speed = done / elapsed if elapsed > 0 else 0
                 remaining = (total - done) / speed if speed > 0 else 0
                 remaining_str = self.format_duration(remaining)
-                self.update_progress(f"Downloading {label}s: {done}/{total} - {remaining_str} left")
+                self.update_progress(
+                    t("progress_label.downloading.1").format(
+                        a=self._label(kind, total, translate=True),
+                        b=done,
+                        c=total,
+                        d=remaining_str,
+                    )
+                )
 
         with ThreadPoolExecutor(max_workers=8) as executor:
             futures = [executor.submit(download_one, item) for item in items]
@@ -125,16 +139,21 @@ class DownloadMixin:
 
         if self._cancel_event.is_set():
             self.log("Download canceled by user.", "info")
-            self.update_progress("Download canceled")
+            self.update_progress(t("progress_label.download_cancel"))
             return False
 
         if errors:
-            self.log(f"{len(errors)} {label}(s) failed to download, see above for details.", "error")
-            self.update_progress(f"{len(errors)} {label}(s) failed to download!")
+            self.log(f"{len(errors)} {self._label(kind, len(errors))} failed to download, see above for details.", "error")
+            self.update_progress(
+                t("progress_label.download_fail").format(
+                    a=len(errors),
+                    b=self._label(kind, len(errors), translate=True),
+                )
+            )
             return False
 
         elapsed_str = self.format_duration(time.time() - start_time)
-        self.log(f"Downloaded {total} {label}{'s' if total != 1 else ''} in {elapsed_str}.", "success")
+        self.log(f"Downloaded {total} {self._label(kind, total)} in {elapsed_str}.", "success")
         return True
 
     def _download_version_files(self, version_data, objects, force=False):

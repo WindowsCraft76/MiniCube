@@ -2,6 +2,8 @@ import contextlib
 import threading
 import tkinter as tk
 from tkinter import messagebox
+from Config import SINGLE_INSTANCE_PING, SINGLE_INSTANCE_PONG
+from i18n import t
 
 
 class LifecycleMixin:
@@ -14,6 +16,9 @@ class LifecycleMixin:
                 return
             try:
                 data = conn.recv(16)
+                if data == SINGLE_INSTANCE_PING:
+                    conn.sendall(SINGLE_INSTANCE_PONG)
+                    data = conn.recv(16)
                 if data == b"SHOW":
                     self.root.after(0, self._restore_window)
             except Exception:
@@ -43,21 +48,22 @@ class LifecycleMixin:
         else:
             self._shutdown_app()
 
+    _STATE_WARNINGS = {
+        "loading": "lifecycle.warning_box.version.loading",
+        "empty": "lifecycle.warning_box.version.no_available",
+        "error": "lifecycle.warning_box.version.error",
+    }
+
     def _on_launch_button(self):
         if self._minecraft_running():
             self.stop_game()
             return
-        if self.version_var.get() == "Loading...":
-            messagebox.showwarning("Launch", "Version list is still loading.\nPlease wait a moment and try again.")
-            return
-        if self.version_var.get() == "No version available":
-            messagebox.showwarning("Launch", "No version available to launch.\nPlease check your settings and try again.")
-            return
-        if self.version_var.get() == "Error":
-            messagebox.showwarning("Launch", "An error occurred while checking version availability.\nPlease check your settings and try again.")
+        if self.version_state != "ready":
+            key = self._STATE_WARNINGS[self.version_state]
+            messagebox.showwarning(t(f"{key}.title"), t(f"{key}.detail"))
             return
         self.save_settings()
-        self.update_progress("Starting...")
+        self.update_progress(t("progress_label.starting"))
         self.launch_game()
 
     def _cancel_or_stop(self):
@@ -67,7 +73,7 @@ class LifecycleMixin:
         if self.download_thread and self.download_thread.is_alive():
             self._cancel_event.set()
             self.log("Cancellation requested!", "warn")
-            self.update_progress("Canceling...")
+            self.update_progress(t("progress_label.canceling"))
 
     def stop_game(self):
         process = self.game_process
@@ -75,7 +81,7 @@ class LifecycleMixin:
             return
         self.log(f"Stop requested for Java process! (PID {process.pid})", "warn")
         self._game_stop_requested = True
-        self.update_progress("Stopping game...")
+        self.update_progress(t("progress_label.stopping"))
         try:
             process.terminate()
         except OSError as error:
@@ -138,10 +144,10 @@ class LifecycleMixin:
             threading.Thread(target=run_update_check, daemon=True),
             threading.Thread(target=run_manifest_fetch, daemon=True),
         ]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
+        for th in threads:
+            th.start()
+        for th in threads:
+            th.join()
 
     def _on_first_map(self, event):
         if self._ui_ready:
@@ -153,9 +159,9 @@ class LifecycleMixin:
             self._pending_no_internet_popup = False
             self._show_no_internet_info()
         if self._pending_update_version:
-            remote_version, remote_numeric, remote_type = self._pending_update_version
+            remote_version, remote_type = self._pending_update_version
             self._pending_update_version = None
-            self._show_update_popup(remote_version, remote_numeric, remote_type)
+            self._show_update_popup(remote_version, remote_type)
 
     def _hide_all_windows(self):
         self._hidden_windows = []

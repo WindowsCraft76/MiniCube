@@ -9,6 +9,8 @@ from collections import deque
 from tkinter import messagebox
 from Config import ASSETS
 from AppMixins.Exceptions import _AbortLaunch
+from i18n import t
+from ScrollingButton import ScrollingButton
 
 
 class CrashMixin:
@@ -92,13 +94,13 @@ class CrashMixin:
                 hbar.grid(row=1, column=0, sticky="ew")
 
             if report_path:
-                tk.Button(
-                    dialog, text="Open crash report", width=18,
+                ScrollingButton(
+                    dialog, text=t("crash.button.open_report"), width=18,
                     command=lambda: self._open_with_default_app(report_path)
                 ).pack(pady=(0, 5))
             elif details:
-                tk.Button(
-                    dialog, text="Copy", width=18,
+                ScrollingButton(
+                    dialog, text=t("crash.button.copy"), width=18,
                     command=lambda: self._copy_to_clipboard(details)
                 ).pack(pady=(0, 5))
 
@@ -110,9 +112,9 @@ class CrashMixin:
                 dialog.destroy()
                 event.set()
 
-            tk.Button(btn_frame, text="Repair", width=12, command=lambda: choose("repair")).pack(side=tk.LEFT, padx=5)
-            tk.Button(btn_frame, text="Retry", width=12, command=lambda: choose("retry")).pack(side=tk.LEFT, padx=5)
-            tk.Button(btn_frame, text="Abandoned", width=12, command=lambda: choose("cancel")).pack(side=tk.LEFT, padx=5)
+            ScrollingButton(btn_frame, text=t("crash.button.repair"), width=12, command=lambda: choose("repair")).pack(side=tk.LEFT, padx=5)
+            ScrollingButton(btn_frame, text=t("crash.button.retry"), width=12, command=lambda: choose("retry")).pack(side=tk.LEFT, padx=5)
+            ScrollingButton(btn_frame, text=t("crash.button.abandoned"), width=12, command=lambda: choose("cancel")).pack(side=tk.LEFT, padx=5)
 
             dialog.protocol("WM_DELETE_WINDOW", lambda: choose("cancel"))
             dialog.update_idletasks()
@@ -141,12 +143,12 @@ class CrashMixin:
         except Exception:
             return None
 
-    def _retry_or_abort(self, version_id, ram, title="Launch error", summary="", details="", report_path=None):
+    def _retry_or_abort(self, version_id, ram, title=t("crash_win.launch_error.title"), summary="", details="", report_path=None):
         choice = self._show_launch_error_dialog(title, summary, details, report_path=report_path)
 
         if choice == "repair" and self.no_internet:
             self.log("Repair is unavailable while offline.", "warn")
-            self._show_error_and_wait("Repair version", "You are offline.\nRepairing a version requires an internet connection.")
+            self._show_error_and_wait(t("crash.error_box.repair_failed.title"), threading(t("crash.error_box.repair_failed.detail")))
             raise _AbortLaunch()
 
         if choice == "repair":
@@ -183,25 +185,18 @@ class CrashMixin:
 
         return self._retry_or_abort(
             version_id, ram,
-            title="Game crashed",
+            title=t("crash_win.game_crash.title"),
             summary=reason,
             details=debug_text,
             report_path=crash_report_path,
         )
 
     def _watch_game_output(self, game_process):
-        crash_pattern = "Failed to parse vanilla pack metadata"
-        known_crash_reason = None
         log_tail = deque(maxlen=25)
 
         for line in iter(game_process.stdout.readline, ""):
             clean_line = line.strip("\n")
             self.log(clean_line, "game")
             log_tail.append(clean_line)
-            if crash_pattern in clean_line:
-                known_crash_reason = "Failed to parse vanilla pack metadata."
-                self.log("Corrupted pack metadata detected, stopping the game...", "error")
-                game_process.terminate()
-                break
 
-        return known_crash_reason, log_tail
+        return log_tail

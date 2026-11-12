@@ -4,6 +4,7 @@ from Config import (
     CONNECTIVITY_CHECK_INTERVAL_MS
 )
 from Network import is_online
+from i18n import t
 
 
 class ConnectivityMixin:
@@ -15,14 +16,10 @@ class ConnectivityMixin:
         self._apply_widget_states()
 
     def _show_no_internet_info(self):
-        message = (
-            "Internet connection lost!\n"
-            "It seems to only play the version that is already installed."
-        )
-        messagebox.showwarning("No internet connection", message, parent=self.root)
+        messagebox.showwarning(t("connectivity.warning_box.no_internet.title"), t("connectivity.warning_box.no_internet.detail"), parent=self.root)
 
     def _enter_offline_ui(self):
-        self._set_notification("internet", self.NO_INTERNET_LABEL, self._show_no_internet_info)
+        self._set_notification("internet", t("toolbar.notification.no_internet"), self._show_no_internet_info)
         self.refresh_version_list()
         self._sync_snapshot_check_state()
         self._sync_online_widgets()
@@ -54,7 +51,7 @@ class ConnectivityMixin:
 
         if value:
             self.log("Internet connection lost!", "warn")
-            self._set_notification("internet", self.NO_INTERNET_LABEL, self._show_no_internet_info)
+            self._set_notification("internet", t("toolbar.notification.no_internet"), self._show_no_internet_info)
             self._show_no_internet_info()
             if self.rpc and self.rpc.is_running():
                 self.rpc.stop_rpc()

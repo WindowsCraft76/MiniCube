@@ -8,6 +8,7 @@ from Config import (
     TERMINAL_COLORS,
     TERMINAL_RESET
 )
+from i18n import t
 
 _print_lock = threading.Lock()
 
@@ -41,7 +42,7 @@ class LoggingMixin:
             self.log_window.focus_force()
         else:
             self.log_window = tk.Toplevel(self.root)
-            self.log_window.title("Logs")
+            self.log_window.title(t("logging.window.title"))
             self.log_window.iconbitmap(str(ASSETS / "icon" / "icon_64x64.ico"))
             self.log_window.geometry("600x300")
             self.log_window.protocol("WM_DELETE_WINDOW", self._on_close_log_window)

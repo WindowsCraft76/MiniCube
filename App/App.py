@@ -40,6 +40,8 @@ from AppMixins.VersionData import VersionDataMixin
 from AppMixins.Java import JavaMixin
 from AppMixins.Crash import CrashMixin
 from AppMixins.Launch import LaunchMixin
+from i18n import t
+from ScrollingButton import ScrollingButton
 
 
 class App(
@@ -66,6 +68,7 @@ class App(
         self.log_window = None
         self.log_text_win = None
         self.log_buffer = []
+        self._load_language_setting()
 
         self.game_process = None
         self._playing_username = None
@@ -108,45 +111,45 @@ class App(
         self.root.resizable(False, False)
         self.root.iconbitmap(str(ASSETS / "icon" / "icon_64x64.ico"))
 
-        self.toolbar = tk.Menu(root)
+        self.toolbar = tk.Menu(root, tearoff=0)
         menu = tk.Menu(self.toolbar, tearoff=0)
-        menu.add_command(label="Show logs", command=self.toggle_logs_window)
-        menu.add_command(label="Manage accounts", command=self.toggle_accounts_manager_window)
-        menu.add_command(label="Settings", command=self.toggle_settings_window)
-        menu.add_command(label="Open folder", command=self.open_folder)
+        self._toolbar_menu = menu
+        menu.add_command(label=t("toolbar.menu.logs"), command=self.toggle_logs_window)
+        menu.add_command(label=t("toolbar.menu.accounts"), command=self.toggle_accounts_manager_window)
+        menu.add_command(label=t("toolbar.menu.settings"), command=self.toggle_settings_window)
+        menu.add_command(label=t("toolbar.menu.open_folder"), command=self.open_folder)
         menu.add_separator()
-        menu.add_command(label="Check for updates", command=self.check_version_mismatch)
-        menu.add_command(label="Exit", command=self._on_close_request)
-        self.toolbar.add_cascade(label="Menu", menu=menu)
+        menu.add_command(label=t("toolbar.menu.check_updates"), command=self.check_version_mismatch)
+        menu.add_command(label=t("toolbar.menu.exit"), command=self._on_close_request)
+        self.toolbar.add_cascade(label=t("toolbar.menu"), menu=menu)
 
         self.root.protocol("WM_DELETE_WINDOW", self._on_close_request)
 
         profile_menu = tk.Menu(self.toolbar, tearoff=0)
         self.profile_menu = profile_menu
-        profile_menu.add_radiobutton(label="Vanilla", variable=self.profile_var, value="vanilla", command=self._on_profile_changed)
-        profile_menu.add_radiobutton(label="Installed", variable=self.profile_var, value="installed", command=self._on_profile_changed)
-        self.toolbar.add_cascade(label="Profile", menu=profile_menu)
+        profile_menu.add_radiobutton(label=t("toolbar.profile.vanilla"), variable=self.profile_var, value="vanilla", command=self._on_profile_changed)
+        profile_menu.add_radiobutton(label=t("toolbar.profile.installed"), variable=self.profile_var, value="installed", command=self._on_profile_changed)
+        self.toolbar.add_cascade(label=t("toolbar.profile"), menu=profile_menu)
 
         help = tk.Menu(self.toolbar, tearoff=0)
+        self.help_menu = help
         help.add_command(
-            label="About",
+            label=t("toolbar.help.about"),
             command=lambda:
             messagebox.showinfo(
-            "About",
+            t("about.windows.title"),
             f"MiniCube\nCreated by WindowsCraft76\n\nVersion installed: {local_display} ({local_version_type})\nOperating system: {platform.platform()}\nPython version: {platform.python_version()} {platform.python_build()}\n\nThis is an open-source project under the MIT license.\nMiniCube is not affiliated with, endorsed by, or supported by Mojang Studios or Microsoft.\n\n{copyright}",
         ))
-        help.add_command(label="Open page", command=lambda: webbrowser.open(PAGE_URL))
+        help.add_command(label=t("toolbar.help.open_page"), command=lambda: webbrowser.open(PAGE_URL))
         help.add_separator()
-        help.add_command(label="Terms of Service", command=lambda: webbrowser.open(f"{TERMS_URL}"))
-        help.add_command(label="Privacy Policy", command=lambda: webbrowser.open(f"{PRIVACY_URL}"))
-        help.add_command(label="Disclaimer", command=lambda: webbrowser.open(f"{DISCLAIMER_URL}"))
+        help.add_command(label=t("toolbar.help.terms_of_service"), command=lambda: webbrowser.open(f"{TERMS_URL}"))
+        help.add_command(label=t("toolbar.help.privacy_policy"), command=lambda: webbrowser.open(f"{PRIVACY_URL}"))
+        help.add_command(label=t("toolbar.help.disclaimer"), command=lambda: webbrowser.open(f"{DISCLAIMER_URL}"))
         help.add_separator()
-        help.add_command(label="Report Issue", command=lambda: webbrowser.open(f"{ISSUES_URL}"))
-        help.add_command(label="Feedback", command=lambda: webbrowser.open(f"{FEEDBACK_URL}"))
-        self.toolbar.add_cascade(label="Help", menu=help)
+        help.add_command(label=t("toolbar.help.report_issue"), command=lambda: webbrowser.open(f"{ISSUES_URL}"))
+        help.add_command(label=t("toolbar.help.feedback"), command=lambda: webbrowser.open(f"{FEEDBACK_URL}"))
+        self.toolbar.add_cascade(label=t("toolbar.help"), menu=help)
 
-        self.UPDATE_LABEL = "Install the new version now!"
-        self.NO_INTERNET_LABEL = "No internet"
 
         self.toolbar.add_command(label=" ", state="disabled")
         self._notif_anchor_index = self.toolbar.index("end")
@@ -164,7 +167,8 @@ class App(
             self.rpc.app = self
 
         self.username_var = tk.StringVar(value="Steve")
-        self.version_var = tk.StringVar(value="Loading...")
+        self.version_state = "loading"
+        self.version_var = tk.StringVar(value=t("version_list.state.loading"))
         self.ram_var = tk.IntVar(value=2048)
         self.show_snapshots_var = tk.BooleanVar(value=False)
         self.show_old_var = tk.BooleanVar(value=False)
@@ -201,7 +205,7 @@ class App(
         self.account_frame = tk.Frame(root)
         self.account_frame.pack(pady=(5, 0))
 
-        self.account_label = tk.Label(self.account_frame, text="Account:")
+        self.account_label = tk.Label(self.account_frame, text=t("app.label.account"))
         self.account_menu = ttk.Combobox(
             self.account_frame,
             textvariable=self.selected_account_var,
@@ -209,12 +213,12 @@ class App(
         )
         self.account_menu.bind("<<ComboboxSelected>>", self._on_account_selected)
 
-        self.offline_label = tk.Label(self.account_frame, text="Username:")
+        self.offline_label = tk.Label(self.account_frame, text=t("app.label.username"))
         self.offline_entry = tk.Entry(self.account_frame, textvariable=self.username_var)
 
         self.offline_check = tk.Checkbutton(
             root, 
-            text="Use offline mode", 
+            text=t("app.check.offline"),
             variable=self.is_offline_var, 
             command=self.toggle_account_mode
         )
@@ -222,19 +226,20 @@ class App(
 
         self.refresh_accounts_ui()
 
-        tk.Label(root, text="Version:").pack(pady=(0, 2))
+        self.version_label = tk.Label(root, text=t("app.label.version"))
+        self.version_label.pack(pady=(0, 2))
         self.version_menu = ttk.Combobox(root, textvariable=self.version_var, state="disabled", width=25)
         self.version_menu.pack(pady=(0, 0))
 
-        self.snapshot_check = tk.Checkbutton(root, text="Show snapshots", variable=self.show_snapshots_var, command=self.refresh_version_list)
+        self.snapshot_check = tk.Checkbutton(root, text=t("app.check.snapshot"), variable=self.show_snapshots_var, command=self.refresh_version_list)
         self.snapshot_check.pack(pady=(3, 0))
-        self.snapshot_link = tk.Label(root, text="Don't know what to do? Click here!", fg="blue", cursor="hand2")
+        self.snapshot_link = tk.Label(root, text=t("app.label.help.installed_version"), fg="blue", cursor="hand2")
         self.snapshot_link.bind("<Button-1>", lambda _event: webbrowser.open(HELP_INSTALLED_VERSION_URL))
 
-        self.launch_btn = tk.Button(root, text="Play", command=self._on_launch_button, width=15, anchor="center")
+        self.launch_btn = ScrollingButton(root, text=t("launch_button.play"), command=self._on_launch_button, width=15, anchor="center")
         self.launch_btn.pack(pady=(20, 0))
 
-        self.progress_label = tk.Label(root, text="Waiting...")
+        self.progress_label = tk.Label(root, text=t("progress_label.waiting"))
         self.progress_label.pack(pady=(10, 0))
 
         self.version_manifest = {}

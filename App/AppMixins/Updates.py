@@ -13,14 +13,14 @@ from urllib.parse import unquote, urlparse
 from Config import (
     ASSETS,
     DOWNLOADLAST_URL,
-    UPDATE_POPUP_MESSAGE_DEFAULT,
-    UPDATE_POPUP_MESSAGES,
     TEMP_DIR
 )
 from VersionManager import (
     check_for_update,
     get_update_page_url,
 )
+from i18n import t
+from ScrollingButton import ScrollingButton
 
 
 class UpdatesMixin:
@@ -51,7 +51,7 @@ class UpdatesMixin:
             self._update_download_url = info.get("download_url", "")
             self.root.after(
                 0,
-                lambda: self._add_update_toolbar_entry(remote_display, remote_numeric, remote_type),
+                lambda: self._add_update_toolbar_entry(remote_display, remote_type),
             )
         else:
             self.log(f"Launcher up to date ({local_display})", "info")
@@ -62,21 +62,28 @@ class UpdatesMixin:
         with contextlib.suppress(Exception):
             self.update_btn.pack_forget()
 
-    def _add_update_toolbar_entry(self, remote_version, remote_numeric, remote_type):
-        self._set_notification("update", self.UPDATE_LABEL, lambda: self._start_auto_update(remote_version))
+    def _add_update_toolbar_entry(self, remote_version, remote_type):
+        self._set_notification("update", t("toolbar.notification.update"), lambda: self._start_auto_update(remote_version))
 
         if self._ui_ready:
-            self._show_update_popup(remote_version, remote_numeric, remote_type)
+            self._show_update_popup(remote_version, remote_type)
         else:
-            self._pending_update_version = (remote_version, remote_numeric, remote_type)
+            self._pending_update_version = (remote_version, remote_type)
 
-    def _show_update_popup(self, remote_version, remote_numeric, remote_type):
+    def _show_update_popup(self, remote_version, remote_type):
 
-        message_template = UPDATE_POPUP_MESSAGES.get(remote_type.lower(), UPDATE_POPUP_MESSAGE_DEFAULT)
-        message = message_template.format(version=remote_version)
+        update_popup_messages = {
+            "release": t("update.popup_message.release"),
+            "hotfix": t("update.popup_message.hotfix"),
+            "beta": t("update.popup_message.beta"),
+        }
+        update_popup_message_default = t("update.popup_message.default")
+
+        message_template = update_popup_messages.get(remote_type.lower(), update_popup_message_default)
+        message = message_template.format(a=remote_version)
 
         popup = tk.Toplevel(self.root)
-        popup.title("New update available!")
+        popup.title(t("update.update_info.title"))
         popup.iconbitmap(str(ASSETS / "icon" / "icon_64x64.ico"))
         popup.resizable(False, False)
         popup.transient(self.root)
@@ -97,8 +104,8 @@ class UpdatesMixin:
         def on_no():
             popup.destroy()
 
-        tk.Button(btn_frame, text="Yes, update now!", width=25, command=on_yes).pack(side="right", padx=(5, 25))
-        tk.Button(btn_frame, text="No, later", width=15, command=on_no).pack(side="right", padx=(25, 5))
+        ScrollingButton(btn_frame, text=t("update.update_info.button.yes"), width=25, command=on_yes).pack(side="right", padx=(5, 25))
+        ScrollingButton(btn_frame, text=t("update.update_info.button.no"), width=15, command=on_no).pack(side="right", padx=(25, 5))
 
         popup.update_idletasks()
         x = self.root.winfo_x() + (self.root.winfo_width() // 2) - (popup.winfo_width() // 2)
@@ -116,7 +123,7 @@ class UpdatesMixin:
             webbrowser.open(get_update_page_url())
             return
         if self._minecraft_running():
-            messagebox.showwarning("Update", "Close Minecraft before updating.")
+            messagebox.showwarning(t("update.update_info.title"), t("update.update_info.minecraft_running"))
             return
 
         self._updating = True
@@ -127,17 +134,17 @@ class UpdatesMixin:
 
     def _build_update_window(self, remote_display):
         win = tk.Toplevel(self.root)
-        win.title("MiniCube Update")
+        win.title(t("update.update_window.title"))
         win.iconbitmap(str(ASSETS / "icon" / "icon_64x64.ico"))
         win.resizable(False, False)
         win.protocol("WM_DELETE_WINDOW", self._cancel_auto_update)
 
-        tk.Label(win, text=f"Downloading setup for {remote_display}...").pack(pady=(15, 5), padx=20)
+        tk.Label(win, text=t("update.update_window.label.detail").format(a=remote_display)).pack(pady=(15, 5), padx=20)
         self._update_bar = ttk.Progressbar(win, length=300, mode="determinate", maximum=100)
         self._update_bar.pack(padx=20)
-        self._update_status = tk.Label(win, text="Starting...")
+        self._update_status = tk.Label(win, text=t("update.update_window.label.starting"))
         self._update_status.pack(pady=5)
-        tk.Button(win, text="Cancel", width=12, command=self._cancel_auto_update).pack(pady=(5, 15))
+        ScrollingButton(win, text=t("update.update_window.button.cancel"), width=12, command=self._cancel_auto_update).pack(pady=(5, 15))
 
         win.update_idletasks()
         x = (win.winfo_screenwidth() - win.winfo_width()) // 2
@@ -200,7 +207,7 @@ class UpdatesMixin:
         self._close_update_window()
         self._updating = False
         self._restore_all_windows()
-        self.update_progress("Update canceled")
+        self.update_progress(t("progress_label.update_cancel"))
 
     def _on_update_failed(self, error):
         self._close_update_window()
@@ -208,13 +215,13 @@ class UpdatesMixin:
         self._restore_all_windows()
         self.log(f"Update download failed: {error}", "error")
         if messagebox.askyesno(
-            "Update failed",
-            f"Unable to download the update.\n\n{error}\n\nOpen the download page instead?",
+            t("update.update_failed.title"),
+            t("update.update_failed.detail").format(a=error),
         ):
             webbrowser.open(get_update_page_url())
 
     def _finish_auto_update(self, installer: Path):
-        self._update_status.config(text="Launching the installer...")
+        self._update_status.config(text=t("update.update_window.label.launching"))
         self._update_win.update_idletasks()
         self.log(f"Launching installer: {installer} --update", "info")
 

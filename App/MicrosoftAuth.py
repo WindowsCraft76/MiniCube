@@ -18,6 +18,7 @@ from Config import (
     XBOX_USER_AUTH_URL,
     XBOX_XSTS_URL,
 )
+from i18n import t
 
 
 class MicrosoftAuth:
@@ -102,7 +103,7 @@ class MicrosoftAuth:
             error_str = str(e)
             if self.app:
                 self.app.log(f"Authentication failed!: {error_str}", "error")
-                self.app.root.after(0, lambda: messagebox.showerror("Authentication Failed! See logs for details.", error_str))
+                self.app.root.after(0, lambda: messagebox.showerror(t("microsoft_auth.error_box.auth_fail.title"), t("microsoft_auth.error_box.auth_fail.detail")))
             return None
 
     def _start_local_server(self):
@@ -250,7 +251,7 @@ class MicrosoftAuth:
                 if self.app:
                     self.app.root.after(
                         0,
-                        lambda: self.app.update_progress("Refreshing token...")
+                        lambda: self.app.update_progress(t("progress_label.refresh_token"))
                     )
 
             url = f"{TOKEN_URL}"
@@ -287,7 +288,7 @@ class MicrosoftAuth:
 
             if self.app:
                 self.app.log(f"Token refreshed successfully for {account_data.get('username')}.", "success")
-                self.app.update_progress("Token refreshed!")
+                self.app.update_progress(t("progress_label.token_refreshed"))
 
             return account_data
 

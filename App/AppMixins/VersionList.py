@@ -5,11 +5,16 @@ from Config import (
     VERSIONS_DIR
 )
 from AppMixins.Exceptions import _AbortLaunch
+from i18n import t
 
 
 class VersionListMixin:
 
-    _VERSION_PLACEHOLDERS = ("Loading...", "No version found", "Error")
+    _STATE_KEYS = {
+        "loading": "version_list.state.loading",
+        "empty": "version_list.state.empty",
+        "error": "version_list.state.error",
+    }
 
     def _apply_version_list_keeping(self, previous_version=None):
         if self.no_internet:
@@ -51,19 +56,24 @@ class VersionListMixin:
             self.snapshot_check.config(state="disabled" if (self._ui_locked or self.no_internet) else "normal")
 
     def _sync_version_menu_state(self):
-        if self.version_var.get() in self._VERSION_PLACEHOLDERS:
+        if self.version_state != "ready":
             self.version_menu.config(state="disabled")
         else:
             self.version_menu.config(state="disabled" if self._ui_locked else "readonly")
 
+    def _set_version_state(self, state):
+        self.version_state = state
+        self.version_var.set(t(self._STATE_KEYS[state]))
+
     def _set_version_list(self, values, error=False):
         self.version_menu["values"] = values
-        if values and not error:
+        if error:
+            self._set_version_state("error")
+        elif values:
+            self.version_state = "ready"
             self.version_var.set(values[0])
-        elif not error:
-            self.version_var.set("No version found")
         else:
-            self.version_var.set("Error")
+            self._set_version_state("empty")
         self._sync_version_menu_state()
 
     def refresh_version_list(self):
@@ -79,6 +89,9 @@ class VersionListMixin:
             self._apply_version_list_to_ui()
         else:
             self._set_version_list([], error=True)
+
+    def _has_valid_version(self):
+        return self.version_state == "ready"
 
     def _apply_installed_version_list(self):
         try:
@@ -102,6 +115,8 @@ class VersionListMixin:
         self._set_version_list(list(self.installed_profiles_map.keys()))
 
     def _get_selected_version_id(self):
+        if not self._has_valid_version():
+            return None
         if self.profile_var.get() == "installed":
             return self.installed_profiles_map.get(self.version_var.get())
         return self.version_var.get()
@@ -123,7 +138,7 @@ class VersionListMixin:
             self.log("Manifest fetch canceled.", "info")
             return False
         except Exception as e:
-            self.root.after(0, lambda: messagebox.showerror("Error", "Unable to fetch manifest! See logs for details."))
+            self.root.after(0, lambda: messagebox.showerror(t("version_list.error_box.fetch_manifest.title"), t("version_list.error_box.fetch_manifest.detail")))
             self.log(f"Error fetching version manifest! {e}", "error")
             return False
 

@@ -8,7 +8,12 @@ import tkinter as tk
 import traceback
 from tkinter import messagebox
 from App import App
-from Config import LOGS_DIR, SINGLE_INSTANCE_PORT
+from Config import (
+    LOGS_DIR,
+    SINGLE_INSTANCE_PING,
+    SINGLE_INSTANCE_PONG,
+    SINGLE_INSTANCE_PORT,
+)
 from DiscordRPC import DiscordRPC
 from SplashScreen import SplashScreen
 
@@ -36,15 +41,25 @@ def _acquire_single_instance():
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
         s.bind(("127.0.0.1", SINGLE_INSTANCE_PORT))
-    except OSError:
+    except OSError as bind_error:
+        s.close()
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
                 client.settimeout(1.0)
                 client.connect(("127.0.0.1", SINGLE_INSTANCE_PORT))
+                client.sendall(SINGLE_INSTANCE_PING)
+                response = client.recv(16)
+                if response != SINGLE_INSTANCE_PONG:
+                    raise RuntimeError(
+                        f"Port {SINGLE_INSTANCE_PORT} is occupied by a process "
+                        "that is not a MiniCube instance."
+                    ) from bind_error
                 client.sendall(b"SHOW")
-        except Exception:
-            pass
-        s.close()
+        except OSError as probe_error:
+            raise OSError(
+                f"MiniCube could not start because port {SINGLE_INSTANCE_PORT} "
+                "is occupied and no running MiniCube instance responded."
+            ) from probe_error
         sys.exit(0)
 
     s.listen(1)

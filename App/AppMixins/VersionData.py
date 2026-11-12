@@ -8,6 +8,7 @@ from Config import (
     VERSIONS_DIR
 )
 from AppMixins.Exceptions import _AbortLaunch
+from i18n import t
 
 
 class VersionDataMixin:
@@ -292,9 +293,8 @@ class VersionDataMixin:
             if len(missing) > 8:
                 shown += f"\n- ... and {len(missing) - 8} more"
             self._show_error_and_wait(
-                "Missing version files",
-                f"{version_id} cannot be launched offline, some files are missing:\n\n{shown}\n\n"
-                "Go back online and restart MiniCube to download or repair them."
+                t("version_data.error_box.missing_file.title.0"),
+                t("version_data.error_box.missing_file.detail.0").format(a=version_id, b=version_id)
             )
             raise _AbortLaunch()
 
@@ -327,9 +327,8 @@ class VersionDataMixin:
                 for name in missing_files:
                     self.log(f"Missing installed version file: {version_dir / name}", "error")
                 self._show_error_and_wait(
-                    "Installed version missing files",
-                    f"The version {version_id} is incomplete! Please reinstall.\n\n"
-                    "The profile for this version will be deleted, but this does not affect your save files!"
+                    t("version_data.error_box.missing_file.title.1"),
+                    t("version_data.error_box.missing_file.detail.1").format(a=version_id)
                 )
                 self.profile_manager.remove_profile(version_id)
                 self.log(f"Profile {version_id} removed!", "warn")

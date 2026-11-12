@@ -8,6 +8,7 @@ from Config import (
     NATIVES_DIR
 )
 from AppMixins.Exceptions import _AbortLaunch
+from i18n import t
 
 
 class JavaMixin:
@@ -50,7 +51,7 @@ class JavaMixin:
             return javaw
 
         self.log(f"Downloading Java {major_version}...", "info")
-        self.update_progress("Downloading Java...")
+        self.update_progress(t("progress_label.download_java"))
 
         api_url = (
             f"{API_AZUL_URL}/metadata/v1/zulu/packages/"
@@ -75,7 +76,7 @@ class JavaMixin:
         self._urlretrieve(download_url, zip_path)
         self.log(f"Downloaded {zip_name}", "success")
 
-        self.update_progress("Extracting Java...")
+        self.update_progress(t("progress_label.extracte_java"))
         self.log(f"Extracting Java {major_version}...", "info")
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall(JAVA_DIR)
@@ -85,7 +86,7 @@ class JavaMixin:
         javaw = self._find_local_java(major_version)
         if javaw:
             self.log(f"Java {major_version} installed successfully!", "success")
-            self.update_progress("Java installed!")
+            self.update_progress(t("progress_label.java_installed"))
             return javaw
 
         raise RuntimeError(f"No Java package found for Java {major_version}")
@@ -127,7 +128,7 @@ class JavaMixin:
         os_name = self._current_os_name()
 
         self.log(f"Extracting natives for {version_id}...", "info")
-        self.update_progress("Extracting natives...")
+        self.update_progress(t("progress_label.extracte_natives"))
 
         extracted_count = 0
         for lib in version_data.get("libraries", []):
@@ -170,8 +171,8 @@ class JavaMixin:
 
     def _prepare_java_offline(self, version_id, version_data):
         java_major = self.get_required_java_version(version_data)
-        self._set_launch_button("Loading...", "disabled")
-        self.update_progress("Checking Java...")
+        self._set_launch_button(t("launch_button.loading"), "disabled")
+        self.update_progress(t("progress_label.checking_java"))
 
         cached_profile = self.profile_manager.get_profile(version_id) or {}
         cached_path = cached_profile.get("javaPath")
@@ -179,9 +180,8 @@ class JavaMixin:
         if not cached_path or not Path(cached_path).exists():
             self.log(f"Java path missing or invalid for {version_id}: {cached_path!r}", "error")
             self._show_error_and_wait(
-                "Java not found",
-                f"No valid Java runtime is recorded for {version_id}.\n"
-                "Go back online and launch this version once to set it up."
+                t("java.error_box.java_not_found.title"),
+                t("java.error_box.java_not_found.detail").format(a=version_id)
             )
             raise _AbortLaunch()
 
@@ -207,8 +207,8 @@ class JavaMixin:
         cached_java_path = cached_profile.get("javaPath") if cached_profile else None
         cached_java_major = cached_profile.get("javaMajor") if cached_profile else None
 
-        self._set_launch_button("Loading...", "disabled")
-        self.update_progress("Loading Java...")
+        self._set_launch_button(t("launch_button.loading"), "disabled")
+        self.update_progress(t("progress_label.loading_java"))
 
         if cached_java_path and cached_java_major == java_major and Path(cached_java_path).exists():
             return Path(cached_java_path), java_major, NATIVES_DIR / version_id

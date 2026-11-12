@@ -8,6 +8,8 @@ from Config import (
 )
 from MicrosoftAuth import MicrosoftAuth
 from SplashScreen import center_window
+from i18n import t
+from ScrollingButton import ScrollingButton
 
 
 class AccountsMixin:
@@ -32,7 +34,7 @@ class AccountsMixin:
             return
         
         self.acc_win = tk.Toplevel(self.root)
-        self.acc_win.title("Accounts Manager")
+        self.acc_win.title(t("accounts.window.title"))
         self.acc_win.iconbitmap(str(ASSETS / "icon" / "icon_64x64.ico"))
         self.acc_win.resizable(False, False)
         center_window(self.acc_win, 300, 250)
@@ -45,7 +47,7 @@ class AccountsMixin:
 
         self.acc_empty_label = tk.Label(
             self.acc_list_container,
-            text="No account available",
+            text=t("accounts.label.no_account"),
             fg="gray"
         )
 
@@ -56,7 +58,7 @@ class AccountsMixin:
         btn_frame = tk.Frame(self.acc_win)
         btn_frame.pack(pady=10)
 
-        self.add_account_btn = tk.Button(btn_frame, text="Add account", command=self.add_microsoft_account)
+        self.add_account_btn = ScrollingButton(btn_frame, text=t("accounts.button.add"), command=self.add_microsoft_account, width=18)
         self.add_account_btn.pack(side=tk.LEFT, padx=5)
         self._sync_online_widgets()
 
@@ -71,7 +73,7 @@ class AccountsMixin:
 
     def add_microsoft_account(self):
         if self.no_internet:
-            messagebox.showwarning("Add account", "You are offline.\nAdding an account requires an internet connection.")
+            messagebox.showwarning(t("accounts.warning_box.no_internet.title"), t("accounts.warning_box.no_internet.detail"))
             return
 
         if hasattr(self, "add_account_btn"):
@@ -88,7 +90,7 @@ class AccountsMixin:
 
     def _show_connecting_popup(self):
         self.connecting_win = tk.Toplevel(self.acc_win)
-        self.connecting_win.title("Connecting...")
+        self.connecting_win.title(t("accounts.connection_window.title"))
         self.connecting_win.resizable(False, False)
         with contextlib.suppress(Exception):
             self.connecting_win.iconbitmap(str(ASSETS / "icon" / "icon_64x64.ico"))
@@ -98,7 +100,7 @@ class AccountsMixin:
 
         tk.Label(
             self.connecting_win,
-            text="Connecting to Microsoft...\nPlease continue in your browser.",
+            text=t("accounts.connection_window.message"),
             justify="center",
             padx=15,
             pady=25
@@ -153,7 +155,7 @@ class AccountsMixin:
 
         head_path = CACHE_DIR / f"{uuid}.png"
         if not head_path.exists():
-            return None
+            head_path = ASSETS / "default_head.png"
 
         try:
             img = tk.PhotoImage(file=str(head_path))
@@ -219,7 +221,7 @@ class AccountsMixin:
                 icon_label = tk.Label(row, width=4, bg="white")
             icon_label.pack(side=tk.LEFT, padx=(10, 4))
 
-            options_btn = tk.Button(
+            options_btn = ScrollingButton(
                 row, text="⋮", bg="white", relief=tk.FLAT,
                 font=("Segoe UI", 12, "bold"), width=2,
                 command=lambda u=username, uid=uuid: self._open_account_options_menu(u, uid)
@@ -252,15 +254,15 @@ class AccountsMixin:
 
         menu = tk.Menu(self.acc_win, tearoff=0)
         menu.add_command(
-            label="Refresh token",
+            label=t("accounts.label.refresh_token"),
             state="disabled" if self.no_internet else "normal",
             command=lambda: self._refresh_selected_account_token(username),
         )
         if is_default:
-            menu.add_command(label="Remove default account", command=lambda: self._unset_default_account(uuid))
+            menu.add_command(label=t("accounts.label.remove_default"), command=lambda: self._unset_default_account(uuid))
         else:
-            menu.add_command(label="Set as default account", command=lambda: self._set_default_account(uuid))
-        menu.add_command(label="Delete account", command=lambda: self._delete_account(username))
+            menu.add_command(label=t("accounts.label.set_default"), command=lambda: self._set_default_account(uuid))
+        menu.add_command(label=t("accounts.label.remove"), command=lambda: self._delete_account(username))
 
         try:
             x = self.acc_win.winfo_pointerx()
@@ -280,7 +282,7 @@ class AccountsMixin:
 
     def _refresh_selected_account_token(self, username):
         if self.no_internet:
-            messagebox.showwarning("Refresh token", "You are offline.\nRefreshing a token requires an internet connection.")
+            messagebox.showwarning(t("accounts.warning_box.refresh_token.title"), t("accounts.warning_box.refresh_token.detail"))
             return
 
         account_data = self.account_manager.get_account_by_name(username)
@@ -299,8 +301,8 @@ class AccountsMixin:
                     self.refresh_accounts_ui()
                 else:
                     messagebox.showerror(
-                        "Authentication Error",
-                        f"Failed to refresh token for {username}.\nPlease log in again."
+                        t("accounts.error_box.refresh_token.title").format(a=username),
+                        t("accounts.error_box.refresh_token.detail")
                     )
 
             self.root.after(0, finish)
@@ -310,12 +312,15 @@ class AccountsMixin:
     def _delete_account(self, username):
         if self._minecraft_running() and username == self._playing_username:
             messagebox.showwarning(
-                "Delete account",
-                f"{username} is currently playing.\nStop the game before deleting this account."
+                t("accounts.warning_box.delete_account_failed.title"),
+                t("accounts.warning_box.delete_account_failed.detail").format(a=username)
             )
             return
 
-        if not messagebox.askyesno("Delete account", f"Delete account {username}?"):
+        if not messagebox.askyesno(
+            t("accounts.yesno_box.delete_account.confirm_title"),
+            t("accounts.yesno_box.delete_account.confirm_detail").format(a=username)
+        ):
             return
 
         account_data = self.account_manager.get_account_by_name(username)
@@ -347,8 +352,8 @@ class AccountsMixin:
                 self.is_offline_var.set(False)
                 self.toggle_account_mode()
                 messagebox.showwarning(
-                    "Warning",
-                    "Connect at least one Microsoft account to unlock Offline mode."
+                    t("accounts.warning_box.unlock_offline.title"),
+                    t("accounts.warning_box.unlock_offline.detail")
                 )
                 return
             

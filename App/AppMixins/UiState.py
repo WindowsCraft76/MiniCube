@@ -2,6 +2,7 @@ import contextlib
 import os
 import time
 import tkinter as tk
+from i18n import t
 
 
 class UiStateMixin:
@@ -48,7 +49,7 @@ class UiStateMixin:
         self._ui_locked = not enabled
         normal_state = "normal" if enabled else "disabled"
 
-        profile_menu_index = self._find_toolbar_index_by_label("Profile")
+        profile_menu_index = self._find_toolbar_index_by_label(t("toolbar.profile"))
         if profile_menu_index is not None:
             self.toolbar.entryconfig(profile_menu_index, state=normal_state)
         if hasattr(self, "profile_menu"):
@@ -62,7 +63,7 @@ class UiStateMixin:
         self._apply_widget_states()
 
         if enabled:
-            self.launch_btn.config(state="normal", text="Play")
+            self.launch_btn.config(state="normal", text=t("launch_button.play"))
             self.refresh_version_list()
 
     def update_progress(self, text=""):
@@ -73,7 +74,7 @@ class UiStateMixin:
         if self._game_started_at is None:
             return
         elapsed = self.format_duration(time.monotonic() - self._game_started_at)
-        self.update_progress(f"Game in progress - {elapsed}")
+        self.update_progress(t("progress_label.game_progress").format(a=elapsed))
         self._game_status_after_id = self.root.after(1000, self._update_game_status)
 
     def _stop_game_status_timer(self):
