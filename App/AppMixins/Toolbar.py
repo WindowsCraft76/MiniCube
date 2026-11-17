@@ -129,3 +129,15 @@ class ToolbarMixin:
         except Exception as e:
             if self.debug:
                 self.log(f"Notification align failed: {e}", "debug")
+
+    def _redraw_menubar(self):
+        if os.name != "nt":
+            return
+        with contextlib.suppress(Exception):
+            import ctypes
+            from ctypes import wintypes
+            user32 = ctypes.windll.user32
+            user32.DrawMenuBar.argtypes = [wintypes.HWND]
+            hwnd = self._resolve_root_hwnd()
+            if hwnd:
+                user32.DrawMenuBar(hwnd)

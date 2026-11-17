@@ -57,6 +57,7 @@ class UiStateMixin:
                 self.profile_menu.entryconfig(profile_index, state=normal_state)
 
         self.root.config(menu=self.toolbar)
+        self._redraw_menubar()
         self._right_align_notifications()
         self.root.after(250, self._right_align_notifications)
 
