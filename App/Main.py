@@ -1,6 +1,5 @@
 import contextlib
 import re
-import socket
 import sys
 import threading
 import time
@@ -10,12 +9,10 @@ from tkinter import messagebox
 from App import App
 from Config import (
     LOGS_DIR,
-    SINGLE_INSTANCE_PING,
-    SINGLE_INSTANCE_PONG,
-    SINGLE_INSTANCE_PORT,
 )
 from DiscordRPC import DiscordRPC
 from SplashScreen import SplashScreen
+from InstanceLock import acquire_instance_slot
 
 _ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
@@ -36,40 +33,33 @@ class Tee:
     def isatty(self):
         return any(f.isatty() for f in self.files)
 
-def _acquire_single_instance():
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    try:
-        s.bind(("127.0.0.1", SINGLE_INSTANCE_PORT))
-    except OSError as bind_error:
-        s.close()
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
-                client.settimeout(1.0)
-                client.connect(("127.0.0.1", SINGLE_INSTANCE_PORT))
-                client.sendall(SINGLE_INSTANCE_PING)
-                response = client.recv(16)
-                if response != SINGLE_INSTANCE_PONG:
-                    raise RuntimeError(
-                        f"Port {SINGLE_INSTANCE_PORT} is occupied by a process "
-                        "that is not a MiniCube instance."
-                    ) from bind_error
-                client.sendall(b"SHOW")
-        except OSError as probe_error:
-            raise OSError(
-                f"MiniCube could not start because port {SINGLE_INSTANCE_PORT} "
-                "is occupied and no running MiniCube instance responded."
-            ) from probe_error
-        sys.exit(0)
-
-    s.listen(1)
-    return s
+def _show_fatal_error(error):
+    with contextlib.suppress(Exception):
+        temp_root = tk.Tk()
+        temp_root.withdraw()
+        messagebox.showerror(
+            "MiniCube Startup Error",
+            "MiniCube could not start.\n\n"
+            f"{type(error).__name__}: {error}\n\n"
+            "If the problem persists, please report it to the developers."
+        )
+        temp_root.destroy()
 
 def main():
-    instance_socket = _acquire_single_instance()
 
+    instance_lock, other_running = acquire_instance_slot()
     root = tk.Tk()
     root.withdraw()
+
+    if other_running and not messagebox.askyesno(
+        "MiniCube",
+        "MiniCube is already running.\n"
+        "Opening a new instance may cause conflicts\n\n"
+        "Do you want to open a new instance anyway?",
+        icon="warning",
+    ):
+        root.destroy()
+        sys.exit(0)
 
     splash = SplashScreen(root)
     rpc = DiscordRPC()
@@ -101,7 +91,7 @@ def main():
 
     def start_launcher():
         try:
-            app = App(root, rpc=rpc, debug=debug, instance_socket=instance_socket)
+            app = App(root, rpc=rpc, debug=debug)
             root.app = app
 
             root.update()
@@ -113,12 +103,16 @@ def main():
             if debug:
                 traceback.print_exc()
             messagebox.showerror("Startup Error", str(e))
-            with contextlib.suppress(Exception):
-                instance_socket.close()
             root.destroy()
 
     root.after(100, start_launcher)
     root.mainloop()
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        if "--debug" in sys.argv[1:]:
+            traceback.print_exc()
+        _show_fatal_error(e)
+        sys.exit(1)

@@ -60,7 +60,7 @@ class App(
     CrashMixin,
     LaunchMixin,
 ):
-    def __init__(self, root, rpc=None, debug=None, instance_socket=None):
+    def __init__(self, root, rpc=None, debug=None):
         self.root = root
         self.debug = debug
         self._ui_locked = False
@@ -77,9 +77,6 @@ class App(
         self._game_status_after_id = None
         self._hidden_in_background = False
         self._launcher_exiting = False
-        self._instance_socket = instance_socket
-        if self._instance_socket:
-            threading.Thread(target=self._listen_for_instance_signal, daemon=True).start()
 
         self._ui_ready = False
         self._pending_update_version = None

@@ -41,6 +41,7 @@ It allows you to launch **any Minecraft version** while keeping the launcher min
 * Internal Java installation
 * Protection of personal data
 * Crash report screen
+* Multi-language support
 * Profile
 * Simple interface
 * Lightweight
@@ -56,6 +57,7 @@ Future features will be added in upcoming updates.
 Currently supported:
 
 * **Windows**
+* *Linux Coming Soom!*
 
 Support for other operating systems may come in the future.
 

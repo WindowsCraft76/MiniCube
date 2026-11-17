@@ -2,31 +2,10 @@ import contextlib
 import threading
 import tkinter as tk
 from tkinter import messagebox
-from Config import SINGLE_INSTANCE_PING, SINGLE_INSTANCE_PONG
 from i18n import t
 
 
 class LifecycleMixin:
-
-    def _listen_for_instance_signal(self):
-        while True:
-            try:
-                conn, _ = self._instance_socket.accept()
-            except OSError:
-                return
-            try:
-                data = conn.recv(16)
-                if data == SINGLE_INSTANCE_PING:
-                    conn.sendall(SINGLE_INSTANCE_PONG)
-                    data = conn.recv(16)
-                if data == b"SHOW":
-                    self.root.after(0, self._restore_window)
-            except Exception:
-                pass
-            finally:
-                with contextlib.suppress(Exception):
-                    conn.close()
-
     def _restore_window(self):
         try:
             self._hidden_in_background = False
@@ -93,11 +72,6 @@ class LifecycleMixin:
         try:
             if self.rpc:
                 self.rpc.stop_rpc()
-        except Exception:
-            pass
-        try:
-            if self._instance_socket:
-                self._instance_socket.close()
         except Exception:
             pass
         if self.debug:
